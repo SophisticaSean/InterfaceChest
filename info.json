@@ -1,0 +1,10 @@
+{
+  "name": "InterfaceChest",
+  "version": "1.0.0",
+  "dependencies": ["base >= 0.12"],
+  "title": "Interface Chest",
+  "author": "Peppe",
+  "contact": "",
+  "homepage": "https://github.com/Peppe-KSP/InterfaceChest",
+  "description": "Bridges between belts and trains/logistics chests.  If set to not accept any items (use X to set all slots red) will destroy any items that would have entered through a belt."
+}

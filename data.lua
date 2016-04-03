@@ -12,7 +12,7 @@ data:extend {
 	{
     type = "recipe",
     name = "interface-chest",
-    enabled = "true",
+    enabled = "false",
     ingredients =
 		{
 		  {"smart-chest", 1},
@@ -55,13 +55,13 @@ data:extend {
     {
       shadow =
       {
-        red = {0.7, -0.3},
-        green = {0.7, -0.3}
+        red = {0.6, 0.0},
+        green = {0.4, 0.0}
       },
       wire =
       {
-        red = {0.3, -0.8},
-        green = {0.3, -0.8}
+        red = {-0.1, -0.5},
+        green = {0.1, -0.5}
       }
     },
     circuit_wire_max_distance = 7.5
@@ -101,13 +101,13 @@ data:extend {
     {
       shadow =
       {
-        red = {0.7, -0.3},
-        green = {0.7, -0.3}
+        red = {0.6, 0.0},
+        green = {0.4, 0.0}
       },
       wire =
       {
-        red = {0.3, -0.8},
-        green = {0.3, -0.8}
+        red = {-0.1, -0.5},
+        green = {0.1, -0.5}
       }
     },
     circuit_wire_max_distance = 7.5

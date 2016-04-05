@@ -119,6 +119,73 @@ data:extend {
 		  shift = {0.1, 0}
 		}
 	},
+
+	{ -- Chest Power entity
+		type = "accumulator",
+		name = "interface-chest-power",
+		icon = "__InterfaceChest__/graphics/icon/interfacechest.png",
+		flags = {"placeable-neutral", "player-creation"},
+		order="z",
+		minable = {hardness = .5, mining_time = 2.0, result = "raw-wood"},
+		max_health = 200,
+		corpse = "medium-remnants",
+		collision_mask = {"ghost-layer"},
+		collision_box = {{-0.4, -0.4}, {0.4, 0.4}},
+		selection_box = {{-0.5, -0.5}, {0.5, 0.5}},
+		energy_source =
+		{
+		  type = "electric",
+		  buffer_capacity = "100kJ",
+		  usage_priority = "secondary-input",
+		  input_flow_limit = "500kW",
+		  output_flow_limit = "0kW"
+		},
+		picture =
+		{
+		  filename = "__InterfaceChest__/graphics/interfacechestpower.png",
+		  priority = "extra-high",
+		  width = 1,
+		  height = 1,
+		  --shift = {0.7, -0.2}
+		},
+		charge_animation =
+		{
+		  filename = "__InterfaceChest__/graphics/interfacechestpower.png",
+		  width = 1,
+		  height = 1,
+		  line_length = 1,
+		  frame_count = 1,
+		  shift = {0, 0},
+		  animation_speed = 0.5
+		},
+		charge_cooldown = 0,
+		charge_light = {intensity = 0, size = 0},
+		discharge_animation =
+		{
+		  filename = "__InterfaceChest__/graphics/interfacechestpower.png",
+		  width = 1,
+		  height = 1,
+		  line_length = 1,
+		  frame_count = 1,
+		  shift = {0, 0},
+		  animation_speed = 0.5
+		},
+		discharge_cooldown = 0,
+		discharge_light = {intensity = 0, size = 0},
+		working_sound =
+		{
+		  sound =
+		  {
+			filename = "__base__/sound/accumulator-working.ogg",
+			volume = 1
+		  },
+		  idle_sound = {
+			filename = "__base__/sound/accumulator-idle.ogg",
+			volume = 0.4
+		  },
+		  max_sounds_per_type = 0
+		},
+	},
 }
 
 table.insert(data.raw.technology["advanced-material-processing"].effects,{type = "unlock-recipe", recipe = "interface-chest-trash"})

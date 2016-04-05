@@ -6,6 +6,9 @@ local outputThrottle = 10
 local inputThrottle = 20
 local railCheckThrottle = 120
 local voidThrottle = 180
+local energy_per_action = 8000
+local idleDraw = 500
+local dataVersion = 3
 
 -- How many a chest can pull from a belt lane 0-8
 local inputMultiplier = 8
@@ -35,7 +38,7 @@ function InterfaceChest_Initialize(event)
 		global.InterfaceChest_MasterList = {}
 	end
 	if global.InterfaceChest_DataVersion == nil then
-		global.InterfaceChest_DataVersion = 2
+		global.InterfaceChest_DataVersion = dataVersion
 	end
 end
 
@@ -95,7 +98,7 @@ end
 
 -------------------
 function InterfaceChest_RunStep(event)
-	if global.InterfaceChest_DataVersion ~= 2 then
+	if global.InterfaceChest_DataVersion ~= dataVersion then
 		-- Find all this mod's chests and index them
 		local trashCan = game.get_surface(1).find_entities_filtered{area={{-5000, -5000},{5000, 5000}}, name="interface-chest-trash"}
 		local interfaceChests = game.get_surface(1).find_entities_filtered{area={{-5000, -5000},{5000, 5000}}, name="interface-chest"}
@@ -111,7 +114,7 @@ function InterfaceChest_RunStep(event)
 		end
 		
 		global.InterfaceChest_MasterList = masterList
-		global.InterfaceChest_DataVersion = 2	
+		global.InterfaceChest_DataVersion = dataVersion	
 	else
 		local masterList = global.InterfaceChest_MasterList
 		local chestsToDelete = {}
@@ -119,89 +122,101 @@ function InterfaceChest_RunStep(event)
 			local interfaceChest = masterList[index]
 			local stagger = game.tick + index
 			if 0 == (stagger % outputThrottle) then				
-				if interfaceChest and interfaceChest.chest and interfaceChest.chest.valid then
-					if interfaceChest.chest.name == "interface-chest-trash" then
-						voidChest(interfaceChest, stagger, index)
+				if interfaceChest and interfaceChest.chest and interfaceChest.chest.valid then					
+					if interfaceChest.power == nil or interfaceChest.power.valid == false then
+						interfaceChest = updateInterfaceChest(interfaceChest.chest)
+						global.InterfaceChest_MasterList[index] = interfaceChest
 					else
-						-- No good way to check for nearby train, so if on rail check for train
-						if interfaceChest.onRail and 0 == (stagger % railCheckThrottle) then
-							interfaceChest = updateInterfaceChest(interfaceChest.chest)
-							global.InterfaceChest_MasterList[index] = interfaceChest
-						end
-
-						local chestPosition = getBoundingBox(interfaceChest.chest.position, 0)
-						if 0 == (stagger % inputThrottle) then							
-							if interfaceChest.dirty then
-								interfaceChest = updateInterfaceChest(interfaceChest.chest)
-								global.InterfaceChest_MasterList[index] = interfaceChest
-							end
-
-							-- Input items Into Chest							
-							for i=1, #interfaceChest.inputBelts do 
-								local belt = interfaceChest.inputBelts[i]
-								if belt.valid then
-									if belt.type == "splitter" then
-										if (belt.position.x == chestPosition[1].x and belt.position.y < chestPosition[1].y) or (belt.position.x == chestPosition[2].x and belt.position.y > chestPosition[1].y) or (belt.position.y == chestPosition[1].y and belt.position.x > chestPosition[2].x)  or (belt.position.y == chestPosition[2].y and belt.position.x < chestPosition[2].x) then
-											beltToChest(belt, defines.transport_line.left_split_line, interfaceChest.chest)
-											beltToChest(belt, defines.transport_line.right_split_line, interfaceChest.chest)
-										else
-											beltToChest(belt, defines.transport_line.secondary_left_split_line, interfaceChest.chest)
-											beltToChest(belt, defines.transport_line.secondary_right_split_line, interfaceChest.chest)
-										end
-									else
-									  beltToChest(belt, defines.transport_line.left_line, interfaceChest.chest)
-									  beltToChest(belt, defines.transport_line.right_line, interfaceChest.chest)								
-									end
-								end 
-							end
-
-							-- Input Items from adjacent Inventories
-							if #interfaceChest.inputBelts == 0 and #interfaceChest.outputBelts > 0 then							
-								for i=1, #interfaceChest.inventories do
-									local inventory = interfaceChest.inventories[i]
-									if inventory and inventory.valid and inventory.get_inventory(1).is_empty() == false then
-										sourceToTargetInventory(inventory, interfaceChest.chest)
-									end
-								end
-							end
-						end
+						if interfaceChest.power and interfaceChest.power.valid and interfaceChest.power.energy >= (idleDraw) then
+							interfaceChest.power.energy = interfaceChest.power.energy - idleDraw
 						
-						-- Output items to adjacent Belts
-						if interfaceChest.chest.get_inventory(1).is_empty() == false then					
-							for i=1, #interfaceChest.outputBelts do
-								local belt = interfaceChest.outputBelts[i]
-								if belt.valid then
-									if belt.type == "splitter" then
-										if (belt.position.x == chestPosition[1].x and belt.position.y > chestPosition[1].y) or (belt.position.x == chestPosition[2].x and belt.position.y < chestPosition[1].y) or (belt.position.y == chestPosition[1].y and belt.position.x < chestPosition[2].x)  or (belt.position.y == chestPosition[2].y and belt.position.x > chestPosition[2].x) then
-											chestToBelt(belt, defines.transport_line.left_line, interfaceChest.chest)
-											chestToBelt(belt, defines.transport_line.right_line, interfaceChest.chest)
-										else
-											chestToBelt(belt, defines.transport_line.secondary_left_line, interfaceChest.chest)
-											chestToBelt(belt, defines.transport_line.secondary_right_line, interfaceChest.chest)
+							if interfaceChest.chest.name == "interface-chest-trash" then
+								voidChest(interfaceChest, stagger, index)
+							else
+								-- No good way to check for nearby train, so if on rail check for train
+								if interfaceChest.onRail and 0 == (stagger % railCheckThrottle) then
+									interfaceChest = updateInterfaceChest(interfaceChest.chest)
+									global.InterfaceChest_MasterList[index] = interfaceChest
+								end
+
+								local chestPosition = getBoundingBox(interfaceChest.chest.position, 0)
+								if 0 == (stagger % inputThrottle) then							
+									if interfaceChest.dirty then
+										interfaceChest = updateInterfaceChest(interfaceChest.chest)
+										global.InterfaceChest_MasterList[index] = interfaceChest
+									end
+
+									-- Input items Into Chest							
+									for i=1, #interfaceChest.inputBelts do 
+										local belt = interfaceChest.inputBelts[i]
+										if belt.valid then
+											if belt.type == "splitter" then
+												if (belt.position.x == chestPosition[1].x and belt.position.y < chestPosition[1].y) or (belt.position.x == chestPosition[2].x and belt.position.y > chestPosition[1].y) or (belt.position.y == chestPosition[1].y and belt.position.x > chestPosition[2].x)  or (belt.position.y == chestPosition[2].y and belt.position.x < chestPosition[2].x) then
+													beltToChest(belt, defines.transport_line.left_split_line, interfaceChest.chest, interfaceChest.power)
+													beltToChest(belt, defines.transport_line.right_split_line, interfaceChest.chest, interfaceChest.power)
+												else
+													beltToChest(belt, defines.transport_line.secondary_left_split_line, interfaceChest.chest, interfaceChest.power)
+													beltToChest(belt, defines.transport_line.secondary_right_split_line, interfaceChest.chest, interfaceChest.power)
+												end
+											else
+											  beltToChest(belt, defines.transport_line.left_line, interfaceChest.chest, interfaceChest.power)
+											  beltToChest(belt, defines.transport_line.right_line, interfaceChest.chest, interfaceChest.power)								
+											end
+										end 
+									end
+
+									-- Input Items from adjacent Inventories
+									if #interfaceChest.inputBelts == 0 and #interfaceChest.outputBelts > 0 then							
+										for i=1, #interfaceChest.inventories do
+											local inventory = interfaceChest.inventories[i]
+											if inventory and inventory.valid and inventory.get_inventory(1).is_empty() == false then
+												sourceToTargetInventory(inventory, interfaceChest.chest, interfaceChest.power)
+											end
 										end
-									else
-									  chestToBelt(belt, defines.transport_line.left_line, interfaceChest.chest)
-									  chestToBelt(belt, defines.transport_line.right_line, interfaceChest.chest)
 									end
 								end
-							end
-							
-							-- Output items to adjacent inventories
-							if #interfaceChest.outputBelts == 0 and #interfaceChest.inputBelts > 0 then
-								for i=1, #interfaceChest.inventories do 
-									local inventory = interfaceChest.inventories[i]
-									sourceToTargetInventory(interfaceChest.chest, inventory)
+								
+								-- Output items to adjacent Belts
+								if interfaceChest.chest.get_inventory(1).is_empty() == false then					
+									for i=1, #interfaceChest.outputBelts do
+										local belt = interfaceChest.outputBelts[i]
+										if belt.valid then
+											if belt.type == "splitter" then
+												if (belt.position.x == chestPosition[1].x and belt.position.y > chestPosition[1].y) or (belt.position.x == chestPosition[2].x and belt.position.y < chestPosition[1].y) or (belt.position.y == chestPosition[1].y and belt.position.x < chestPosition[2].x)  or (belt.position.y == chestPosition[2].y and belt.position.x > chestPosition[2].x) then
+													chestToBelt(belt, defines.transport_line.left_line, interfaceChest.chest, interfaceChest.power)
+													chestToBelt(belt, defines.transport_line.right_line, interfaceChest.chest, interfaceChest.power)
+												else
+													chestToBelt(belt, defines.transport_line.secondary_left_line, interfaceChest.chest, interfaceChest.power)
+													chestToBelt(belt, defines.transport_line.secondary_right_line, interfaceChest.chest, interfaceChest.power)
+												end
+											else
+											  chestToBelt(belt, defines.transport_line.left_line, interfaceChest.chest, interfaceChest.power)
+											  chestToBelt(belt, defines.transport_line.right_line, interfaceChest.chest, interfaceChest.power)
+											end
+										end
+									end
+									
+									-- Output items to adjacent inventories
+									if #interfaceChest.outputBelts == 0 and #interfaceChest.inputBelts > 0 then
+										for i=1, #interfaceChest.inventories do 
+											local inventory = interfaceChest.inventories[i]
+											sourceToTargetInventory(interfaceChest.chest, inventory, interfaceChest.power)
+										end
+									end
 								end
 							end
 						end
 					end
-				else					
+				else	
+					if interfaceChest.power and interfaceChest.power.valid then
+						interfaceChest.power.destroy()
+					end
 					chestsToDelete[#chestsToDelete+1] = index
 				end
 			end
 		end
 		-- Clean up Dead Chests
-		for index=1, #chestsToDelete do
+		for index=1, #chestsToDelete do			
 			local deleteKey = chestsToDelete[index]
 			table.remove(global.InterfaceChest_MasterList, deleteKey)			
 		end
@@ -214,12 +229,15 @@ function updateInterfaceChest(chest)
 	local gridTransport = {}
 	local gridInventory = {}
 	local isRail = false
+	local powerDraw
 		
 	for index=1, #entities do 
 		local entity = entities[index]
 		if entity.type ~= "decorative" then
 			if isRail == false and entity.type == "straight-rail" then
 				isRail = true
+			elseif entity.name == "interface-chest-power" and entity.position.x >= center[1].x and entity.position.x <= center[2].x and entity.position.y >= center[1].y and entity.position.y <= center[2].y then
+				powerDraw = entity
 			else
 				-- North
 				if entity.position.x >= center[1].x and entity.position.x <= center[2].x and entity.position.y < center[1].y then
@@ -260,34 +278,41 @@ function updateInterfaceChest(chest)
 		end
 	end
 	
-	return {chest = chest, inputBelts = getInputBelts(gridTransport), outputBelts = getOutputBelts(gridTransport), inventories = getInventories(gridInventory), onRail = isRail, dirty = false}
+	if powerDraw == nil then
+		powerDraw = chest.surface.create_entity{name="interface-chest-power", position=chest.position, force=game.players[1].force}		
+	end
+	
+	return {chest = chest, inputBelts = getInputBelts(gridTransport), outputBelts = getOutputBelts(gridTransport), inventories = getInventories(gridInventory), onRail = isRail, dirty = false, power = powerDraw}
 end
 
 function voidChest(interfaceChest, stagger, index)
-	if 0 == (stagger % inputThrottle) then
-		if interfaceChest.dirty then
-			interfaceChest = updateInterfaceChest(interfaceChest.chest)
-			global.InterfaceChest_MasterList[index] = interfaceChest
-		end
-		
-		if 0 == (stagger % voidThrottle) then		
-			interfaceChest.chest.get_inventory(1).clear()
-		end
-		
-		for i=1, #interfaceChest.inputBelts do 
-			local belt = interfaceChest.inputBelts[i]
-			if belt.valid then
-				if belt.type == "splitter" then	
-					if (belt.position.x > interfaceChest.chest.position.x and belt.position.y > interfaceChest.chest.position.y) or (belt.position.x < interfaceChest.chest.position.x and belt.position.y < interfaceChest.chest.position.y) then
-						beltToVoid(belt, defines.transport_line.left_split_line)
-						beltToVoid(belt, defines.transport_line.right_split_line)
+	if 0 == (stagger % inputThrottle) then	
+		if interfaceChest.chest and interfaceChest.chest.valid and interfaceChest.power and interfaceChest.power.valid and interfaceChest.power.energy >= energy_per_action then
+			if interfaceChest.dirty then
+				interfaceChest = updateInterfaceChest(interfaceChest.chest)
+				global.InterfaceChest_MasterList[index] = interfaceChest
+			end
+			
+			if 0 == (stagger % voidThrottle) then		
+				interfaceChest.chest.get_inventory(1).clear()
+				interfaceChest.power.energy = interfaceChest.power.energy - energy_per_action
+			end
+			
+			for i=1, #interfaceChest.inputBelts do 
+				local belt = interfaceChest.inputBelts[i]
+				if belt.valid then
+					if belt.type == "splitter" then	
+						if (belt.position.x > interfaceChest.chest.position.x and belt.position.y > interfaceChest.chest.position.y) or (belt.position.x < interfaceChest.chest.position.x and belt.position.y < interfaceChest.chest.position.y) then
+							beltToVoid(belt, defines.transport_line.left_split_line, interfaceChest.power)
+							beltToVoid(belt, defines.transport_line.right_split_line, interfaceChest.power)
+						else
+							beltToVoid(belt, defines.transport_line.secondary_left_split_line, interfaceChest.power)
+							beltToVoid(belt, defines.transport_line.secondary_right_split_line, interfaceChest.power)
+						end
 					else
-						beltToVoid(belt, defines.transport_line.secondary_left_split_line)
-						beltToVoid(belt, defines.transport_line.secondary_right_split_line)
+					  beltToVoid(belt, defines.transport_line.left_line, interfaceChest.power)
+					  beltToVoid(belt, defines.transport_line.right_line, interfaceChest.power)
 					end
-				else
-				  beltToVoid(belt, defines.transport_line.left_line)
-				  beltToVoid(belt, defines.transport_line.right_line)
 				end
 			end
 		end
@@ -295,47 +320,55 @@ function voidChest(interfaceChest, stagger, index)
 end
 
 
-function beltToVoid(belt, laneNumber)
-	local lane = belt.get_transport_line(laneNumber).get_contents()
-	for item, size in pairs(lane) do
-		local itemstack = {name=item, count=size}
-		belt.get_transport_line(laneNumber).remove_item(itemstack)		
+function beltToVoid(belt, laneNumber, power)
+	if power and power.valid and power.energy >= energy_per_action then
+		local lane = belt.get_transport_line(laneNumber).get_contents()
+		for item, size in pairs(lane) do
+			local itemstack = {name=item, count=size}
+			belt.get_transport_line(laneNumber).remove_item(itemstack)
+			power.energy = power.energy - energy_per_action		
+		end
 	end
 end
 
-function beltToChest(belt, laneNumber, chest)
-  local items = belt.get_transport_line(laneNumber).get_contents()
-  for item, size in pairs(items) do
-	local itemstack = {name=item, count=math.min(inputMultiplier,size)}
-	if chest and chest.valid and chest.can_insert(itemstack) then
-		itemstack.count = chest.insert(itemstack)
-		belt.get_transport_line(laneNumber).remove_item(itemstack)
-	end
-	break
-  end
-end
-
-function chestToBelt(belt, laneNumber, chest)
-	if chest and chest.valid then
-		local _inventory = chest.get_inventory(1).get_contents()
-		for item, size in pairs(_inventory) do
-			local itemstack = {name=item, count=1}
-			if belt.get_transport_line(laneNumber).insert_at_back(itemstack) then
-				chest.get_inventory(1).remove(itemstack)
+function beltToChest(belt, laneNumber, chest, power)
+	if chest and chest.valid and power and power.valid and power.energy >= energy_per_action then
+		local items = belt.get_transport_line(laneNumber).get_contents()
+		for item, size in pairs(items) do
+			local itemstack = {name=item, count=math.min(inputMultiplier,size)}
+			if chest and chest.valid and chest.can_insert(itemstack) then
+				itemstack.count = chest.insert(itemstack)
+				belt.get_transport_line(laneNumber).remove_item(itemstack)
+				power.energy = power.energy - energy_per_action		
 			end
 			break
 		end
 	end
 end
 
-function sourceToTargetInventory(source, target)
-  if source and source.valid then
+function chestToBelt(belt, laneNumber, chest, power)
+	if chest and chest.valid and power and power.valid and power.energy >= energy_per_action then
+		local _inventory = chest.get_inventory(1).get_contents()
+		for item, size in pairs(_inventory) do
+			local itemstack = {name=item, count=1}
+			if belt.get_transport_line(laneNumber).insert_at_back(itemstack) then
+				chest.get_inventory(1).remove(itemstack)
+				power.energy = power.energy - energy_per_action
+			end
+			break
+		end
+	end
+end
+
+function sourceToTargetInventory(source, target, power)
+  if source and source.valid and power and power.valid and power.energy >= energy_per_action then
 	  local _inventory = source.get_inventory(1).get_contents()
 	  for item, size in pairs(_inventory) do
 		local itemstack = {name=item, count=math.min(maxStackSize,size)}
 		if target and target.valid and target.can_insert(itemstack) then
 			itemstack.count = target.insert(itemstack)
 			source.get_inventory(1).remove(itemstack)
+			power.energy = power.energy - energy_per_action
 		end
 		break
 	  end
@@ -504,7 +537,7 @@ function checkTransportEntity(entity, direction, undergroundType)
 end
 
 function isInventory (entity)
-	if entity and entity.type == "logistic-container" or isTrain(entity) then
+	if entity and entity.type == "logistic-container" or isTrain(entity) or entity.type == "smart-container" then
 		return entity
 	else
 		return nil

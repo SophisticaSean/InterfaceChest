@@ -537,7 +537,7 @@ function checkTransportEntity(entity, direction, undergroundType)
 end
 
 function isInventory (entity)
-	if entity and entity.type == "logistic-container" or isTrain(entity) or entity.type == "smart-container" then
+	if entity and (entity.type == "logistic-container" or (entity.type == "smart-container" and entity.name ~= "interface-chest") or isTrain(entity)) then
 		return entity
 	else
 		return nil
@@ -545,7 +545,15 @@ function isInventory (entity)
 end
 
 function isTrain (entity)
-	if entity and ((entity.type == "cargo-wagon" and entity.train.speed == 0) or (entity.type == "locomotive"  and entity.train.speed == 0)) then
+	if entity and ((entity.type == "cargo-wagon" and entity.train.speed == 0) or (entity.type == "locomotive"  and entity.train.speed == 0) or isWarehouse(entity)) then
+		return entity
+	else
+		return nil
+	end
+end
+
+function isWarehouse(entity)
+	if entity and (entity.name == "warehouse-basic" or entity.name == "warehouse-smart" or entity.name == "warehouse-storage" or entity.name == "warehouse-smart-passive-provider" or entity.name == "warehouse-active-provider" or entity.name == "warehouse-requestor")  then
 		return entity
 	else
 		return nil

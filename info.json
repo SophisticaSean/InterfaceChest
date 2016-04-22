@@ -1,6 +1,6 @@
 {
   "name": "InterfaceChest",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "dependencies": ["base >= 0.12"],
   "title": "Interface Chest",
   "author": "Peppe",

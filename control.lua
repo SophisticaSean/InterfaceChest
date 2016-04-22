@@ -1,13 +1,15 @@
 require "defines"
 require "util"
 
--- ~yellow = 10, ~red =6
-local outputThrottle = 10
-local inputThrottle = 20
-local railCheckThrottle = 120
-local voidThrottle = 180
+-- Belts have 8 slots: yellow 36 ticks, red 18 ticks, blue 12 ticks
+-- Splitters/underground 4 slots: need twice the tick rate
+local chestThrottle = 6
+local railCheckThrottle = chestThrottle * 15
+local voidThrottle = chestThrottle * 20
 local energy_per_action = 8000
 local idleDraw = 500
+
+local beltBalancerThrottle = 6
 
 -- Internal Use
 local dataVersion = 4
@@ -31,11 +33,11 @@ function areaWest(position)  return {{position.x - 1.5, position.y - 0.5},{posit
 
 -- Area around tile
 function getBoundingBox(position, radius)
-  return {{x=position.x-radius-.5,y=position.y-radius-.5},{x=position.x+radius+.5,y=position.y+radius+.5}}
+	return {{x=position.x-radius-.5,y=position.y-radius-.5},{x=position.x+radius+.5,y=position.y+radius+.5}}
 end
 
 -------------------
-function InterfaceChest_Initialize()	
+function InterfaceChest_Initialize()
 	if global.InterfaceChest_MasterList == nil then
 		global.InterfaceChest_MasterList = {}
 	end
@@ -52,18 +54,18 @@ end
 -------------------
 function InterfaceChest_Create(event)
 	local entity = event.created_entity
-	
 	if entity.name == "interface-chest" or entity.name == "interface-chest-trash" then
 		local nextIndex = #global.InterfaceChest_MasterList+1
-		global.InterfaceChest_MasterList[nextIndex] = updateInterfaceChest(entity)		
+		global.InterfaceChest_MasterList[nextIndex] = updateInterfaceChest(entity)
+		--debugPrint("Interface Belt count: " .. nextIndex)
 	end
-	
+
 	if entity.name == "interface-belt-balancer" then
 		local nextIndex = #global.InterfaceBelt_MasterList+1
 		global.InterfaceBelt_MasterList[nextIndex] = entity
 		--debugPrint("Interface Belt count: " .. nextIndex)
 	end
-	
+
 	if isTransport(entity) or isInventory(entity) then
 		handleChange(entity, 2)
 	end
@@ -90,9 +92,9 @@ function scheduleUpdate (entity, range)
 	for index=1, #masterList do
 		local interfaceChest = masterList[index]
 		local chest = interfaceChest.chest
-		--debugPrint( entity.name .. " " .. serpent.block(entity.position))
 		if chest and chest.valid and math.abs(chest.position.x - entity.position.x) < range and math.abs(chest.position.y - entity.position.y) < range then
 			global.InterfaceChest_MasterList[index].dirty = true
+			--debugPrint( entity.name .. " " .. serpent.block(entity.position))
 		end
 	end
 end
@@ -115,39 +117,39 @@ function InterfaceBelt_RunStep()
 	if global.InterfaceChest_DataVersion ~= dataVersion then
 		-- Initialize
 		InterfaceChest_Initialize()
-		
+
 		local beltBalancer = game.get_surface(1).find_entities_filtered{area={{-5000, -5000},{5000, 5000}}, name="interface-belt-balancer"}
 		local masterList = {}
 		for index=1, #beltBalancer do
 			local belt = beltBalancer[index]
 			masterList[#masterList+1] = belt
 		end
-		
+
 		global.InterfaceBelt_MasterList = masterList
-		global.InterfaceChest_DataVersion = dataVersion	
+		global.InterfaceChest_DataVersion = dataVersion
+
 	else
+
 		local masterList = global.InterfaceBelt_MasterList
 		local beltsToDelete = {}
 		for index=1, #masterList do
 			local stagger = game.tick + index
-			if 0 == (stagger % 4)  then 
+			if 0 == (stagger % beltBalancerThrottle) then
 				local belt = masterList[index]
 				if belt and belt.valid then
 					local left = belt.get_transport_line(1)
 					local right = belt.get_transport_line(2)
-					local action = false
-					if balanceBelt(left, right) == false then
-						balanceBelt(right, left)
-					end
+					balanceBelt(right, left)
+					balanceBelt(left, right)
 				else
 					beltsToDelete[#beltsToDelete+1] = index
 				end
 			end
 		end
 		-- Clean up Dead Belts
-		for index=1, #beltsToDelete do			
+		for index=1, #beltsToDelete do
 			local deleteKey = beltsToDelete[index]
-			table.remove(global.InterfaceBelt_MasterList, deleteKey)			
+			table.remove(global.InterfaceBelt_MasterList, deleteKey)
 		end
 	end
 end
@@ -158,7 +160,7 @@ function balanceBelt (source, target)
 		local diff = size - target.get_item_count(item)
 		local itemstack = {name=item, count=1}
 		if diff > 1 and size > 1 then
-			if target.insert_at_back(itemstack) then
+			if target.insert_at(0.72, itemstack) then
 				source.remove_item(itemstack)
 				action = true
 			end
@@ -182,12 +184,12 @@ function InterfaceChest_RunStep(event)
 			local chest = trashCan[index]
 			masterList[#masterList+1] = updateInterfaceChest(chest)
 		end
-		
+
 		for index=1, #interfaceChests do
 			local chest = interfaceChests[index]
 			masterList[#masterList+1] = updateInterfaceChest(chest)
 		end
-		
+
 		global.InterfaceChest_MasterList = masterList
 		global.InterfaceChest_DataVersion = dataVersion	
 	else
@@ -197,15 +199,15 @@ function InterfaceChest_RunStep(event)
 		for index=1, #masterList do
 			local interfaceChest = masterList[index]
 			local stagger = game.tick + index
-			if 0 == (stagger % outputThrottle) then				
-				if interfaceChest and interfaceChest.chest and interfaceChest.chest.valid then					
+			if 0 == (stagger % chestThrottle) then
+				if interfaceChest and interfaceChest.chest and interfaceChest.chest.valid then
 					if interfaceChest.power == nil or interfaceChest.power.valid == false then
 						interfaceChest = updateInterfaceChest(interfaceChest.chest)
 						global.InterfaceChest_MasterList[index] = interfaceChest
 					else
 						if interfaceChest.power and interfaceChest.power.valid and interfaceChest.power.energy >= (idleDraw) then
 							interfaceChest.power.energy = interfaceChest.power.energy - idleDraw
-						
+
 							if interfaceChest.chest.name == "interface-chest-trash" then
 								voidChest(interfaceChest, stagger, index)
 							else
@@ -216,49 +218,47 @@ function InterfaceChest_RunStep(event)
 								end
 
 								local chestPosition = getBoundingBox(interfaceChest.chest.position, 0)
-								if 0 == (stagger % inputThrottle) then							
-									if interfaceChest.dirty then
-										interfaceChest = updateInterfaceChest(interfaceChest.chest)
-										global.InterfaceChest_MasterList[index] = interfaceChest
-									end
+								if interfaceChest.dirty then
+									interfaceChest = updateInterfaceChest(interfaceChest.chest)
+									global.InterfaceChest_MasterList[index] = interfaceChest
+								end
 
-									-- Input items Into Chest							
-									for i=1, #interfaceChest.inputBelts do 
-										local belt = interfaceChest.inputBelts[i]
-										if belt.valid then
-											if belt.type == "splitter" then
-												if (belt.position.x == chestPosition[1].x and belt.position.y < chestPosition[1].y) or (belt.position.x == chestPosition[2].x and belt.position.y > chestPosition[1].y) or (belt.position.y == chestPosition[1].y and belt.position.x > chestPosition[2].x)  or (belt.position.y == chestPosition[2].y and belt.position.x < chestPosition[2].x) then
-													beltToChest(belt, defines.transport_line.left_split_line, interfaceChest.chest, interfaceChest.power)
-													beltToChest(belt, defines.transport_line.right_split_line, interfaceChest.chest, interfaceChest.power)
-												else
-													beltToChest(belt, defines.transport_line.secondary_left_split_line, interfaceChest.chest, interfaceChest.power)
-													beltToChest(belt, defines.transport_line.secondary_right_split_line, interfaceChest.chest, interfaceChest.power)
-												end
+							-- Input items Into Chest
+								for i=1, #interfaceChest.inputBelts do
+									local belt = interfaceChest.inputBelts[i]
+									if belt.valid then
+										if belt.type == "splitter" then
+											if (belt.position.x == chestPosition[1].x and belt.position.y < chestPosition[1].y) or (belt.position.x == chestPosition[2].x and belt.position.y > chestPosition[1].y) or (belt.position.y == chestPosition[1].y and belt.position.x > chestPosition[2].x) or (belt.position.y == chestPosition[2].y and belt.position.x < chestPosition[2].x) then
+												beltToChest(belt, defines.transport_line.left_split_line, interfaceChest.chest, interfaceChest.power)
+												beltToChest(belt, defines.transport_line.right_split_line, interfaceChest.chest, interfaceChest.power)
 											else
-											  beltToChest(belt, defines.transport_line.left_line, interfaceChest.chest, interfaceChest.power)
-											  beltToChest(belt, defines.transport_line.right_line, interfaceChest.chest, interfaceChest.power)								
+												beltToChest(belt, defines.transport_line.secondary_left_split_line, interfaceChest.chest, interfaceChest.power)
+												beltToChest(belt, defines.transport_line.secondary_right_split_line, interfaceChest.chest, interfaceChest.power)
 											end
-										end 
-									end
-
-									-- Input Items from adjacent Inventories
-									if #interfaceChest.inputBelts == 0 and #interfaceChest.outputBelts > 0 then							
-										for i=1, #interfaceChest.inventories do
-											local inventory = interfaceChest.inventories[i]
-											if inventory and inventory.valid and inventory.get_inventory(1).is_empty() == false then
-												sourceToTargetInventory(inventory, interfaceChest.chest, interfaceChest.power)
-											end
+										else
+											beltToChest(belt, defines.transport_line.left_line, interfaceChest.chest, interfaceChest.power)
+											beltToChest(belt, defines.transport_line.right_line, interfaceChest.chest, interfaceChest.power)
 										end
 									end
 								end
-								
+
+								-- Input Items from adjacent Inventories
+								if #interfaceChest.inputBelts == 0 and #interfaceChest.outputBelts > 0 then
+									for i=1, #interfaceChest.inventories do
+										local inventory = interfaceChest.inventories[i]
+										if inventory and inventory.valid and inventory.get_inventory(1).is_empty() == false then
+											sourceToTargetInventory(inventory, interfaceChest.chest, interfaceChest.power)
+										end
+									end
+								end
+
 								-- Output items to adjacent Belts
-								if interfaceChest.chest.get_inventory(1).is_empty() == false then					
+								if interfaceChest.chest.get_inventory(1).is_empty() == false then
 									for i=1, #interfaceChest.outputBelts do
 										local belt = interfaceChest.outputBelts[i]
 										if belt.valid then
 											if belt.type == "splitter" then
-												if (belt.position.x == chestPosition[1].x and belt.position.y > chestPosition[1].y) or (belt.position.x == chestPosition[2].x and belt.position.y < chestPosition[1].y) or (belt.position.y == chestPosition[1].y and belt.position.x < chestPosition[2].x)  or (belt.position.y == chestPosition[2].y and belt.position.x > chestPosition[2].x) then
+												if (belt.position.x == chestPosition[1].x and belt.position.y > chestPosition[1].y) or (belt.position.x == chestPosition[2].x and belt.position.y < chestPosition[1].y) or (belt.position.y == chestPosition[1].y and belt.position.x < chestPosition[2].x) or (belt.position.y == chestPosition[2].y and belt.position.x > chestPosition[2].x) then
 													chestToBelt(belt, defines.transport_line.left_line, interfaceChest.chest, interfaceChest.power)
 													chestToBelt(belt, defines.transport_line.right_line, interfaceChest.chest, interfaceChest.power)
 												else
@@ -266,12 +266,12 @@ function InterfaceChest_RunStep(event)
 													chestToBelt(belt, defines.transport_line.secondary_right_line, interfaceChest.chest, interfaceChest.power)
 												end
 											else
-											  chestToBelt(belt, defines.transport_line.left_line, interfaceChest.chest, interfaceChest.power)
-											  chestToBelt(belt, defines.transport_line.right_line, interfaceChest.chest, interfaceChest.power)
+												chestToBelt(belt, defines.transport_line.left_line, interfaceChest.chest, interfaceChest.power)
+												chestToBelt(belt, defines.transport_line.right_line, interfaceChest.chest, interfaceChest.power)
 											end
 										end
 									end
-									
+
 									-- Output items to adjacent inventories
 									if #interfaceChest.outputBelts == 0 and #interfaceChest.inputBelts > 0 then
 										for i=1, #interfaceChest.inventories do 
@@ -283,7 +283,7 @@ function InterfaceChest_RunStep(event)
 							end
 						end
 					end
-				else	
+				else
 					if interfaceChest.power and interfaceChest.power.valid then
 						interfaceChest.power.destroy()
 					end
@@ -292,9 +292,9 @@ function InterfaceChest_RunStep(event)
 			end
 		end
 		-- Clean up Dead Chests
-		for index=1, #chestsToDelete do			
+		for index=1, #chestsToDelete do
 			local deleteKey = chestsToDelete[index]
-			table.remove(global.InterfaceChest_MasterList, deleteKey)			
+			table.remove(global.InterfaceChest_MasterList, deleteKey)
 		end
 	end
 end
@@ -306,7 +306,7 @@ function updateInterfaceChest(chest)
 	local gridInventory = {}
 	local isRail = false
 	local powerDraw
-		
+
 	for index=1, #entities do 
 		local entity = entities[index]
 		if entity.type ~= "decorative" then
@@ -320,7 +320,7 @@ function updateInterfaceChest(chest)
 					if isTransport(entity) then gridTransport.north = entity end
 					if isInventory(entity) then gridInventory.north = entity end
 				-- South
-				elseif entity.position.x >= center[1].x and entity.position.x <= center[2].x and entity.position.y > center[2].y then		
+				elseif entity.position.x >= center[1].x and entity.position.x <= center[2].x and entity.position.y > center[2].y then
 					if isTransport(entity) then gridTransport.south = entity end
 					if isInventory(entity) then gridInventory.south = entity end
 				-- East
@@ -332,7 +332,7 @@ function updateInterfaceChest(chest)
 					if isTransport(entity) then gridTransport.west = entity end
 					if isInventory(entity) then gridInventory.west = entity end
 				end
-							
+
 				-- North West
 				if entity.position.x <= center[1].x and entity.position.y <= center[1].y then
 					if isTransport(entity) then gridTransport.northWest = entity end
@@ -353,31 +353,31 @@ function updateInterfaceChest(chest)
 			end
 		end
 	end
-	
+
 	if powerDraw == nil then
 		powerDraw = chest.surface.create_entity{name="interface-chest-power", position=chest.position, force=game.players[1].force}		
 	end
-	
+
 	return {chest = chest, inputBelts = getInputBelts(gridTransport), outputBelts = getOutputBelts(gridTransport), inventories = getInventories(gridInventory), onRail = isRail, dirty = false, power = powerDraw}
 end
 
 function voidChest(interfaceChest, stagger, index)
-	if 0 == (stagger % inputThrottle) then	
+	if 0 == (stagger % chestThrottle) then
 		if interfaceChest.chest and interfaceChest.chest.valid and interfaceChest.power and interfaceChest.power.valid and interfaceChest.power.energy >= energy_per_action then
 			if interfaceChest.dirty then
 				interfaceChest = updateInterfaceChest(interfaceChest.chest)
 				global.InterfaceChest_MasterList[index] = interfaceChest
 			end
-			
-			if 0 == (stagger % voidThrottle) then		
+
+			if 0 == (stagger % voidThrottle) then
 				interfaceChest.chest.get_inventory(1).clear()
 				interfaceChest.power.energy = interfaceChest.power.energy - energy_per_action
 			end
-			
+
 			for i=1, #interfaceChest.inputBelts do 
 				local belt = interfaceChest.inputBelts[i]
 				if belt.valid then
-					if belt.type == "splitter" then	
+					if belt.type == "splitter" then
 						if (belt.position.x > interfaceChest.chest.position.x and belt.position.y > interfaceChest.chest.position.y) or (belt.position.x < interfaceChest.chest.position.x and belt.position.y < interfaceChest.chest.position.y) then
 							beltToVoid(belt, defines.transport_line.left_split_line, interfaceChest.power)
 							beltToVoid(belt, defines.transport_line.right_split_line, interfaceChest.power)
@@ -386,8 +386,8 @@ function voidChest(interfaceChest, stagger, index)
 							beltToVoid(belt, defines.transport_line.secondary_right_split_line, interfaceChest.power)
 						end
 					else
-					  beltToVoid(belt, defines.transport_line.left_line, interfaceChest.power)
-					  beltToVoid(belt, defines.transport_line.right_line, interfaceChest.power)
+						beltToVoid(belt, defines.transport_line.left_line, interfaceChest.power)
+						beltToVoid(belt, defines.transport_line.right_line, interfaceChest.power)
 					end
 				end
 			end
@@ -398,38 +398,57 @@ end
 
 function beltToVoid(belt, laneNumber, power)
 	if power and power.valid and power.energy >= energy_per_action then
-		local lane = belt.get_transport_line(laneNumber).get_contents()
-		for item, size in pairs(lane) do
-			local itemstack = {name=item, count=size}
-			belt.get_transport_line(laneNumber).remove_item(itemstack)
-			power.energy = power.energy - energy_per_action		
+		if belt.get_transport_line(laneNumber).can_insert_at(0) == false then
+			local lane = belt.get_transport_line(laneNumber).get_contents()
+			for item, size in pairs(lane) do
+				local itemstack = {name=item, count=size}
+				belt.get_transport_line(laneNumber).remove_item(itemstack)
+				power.energy = power.energy - energy_per_action
+			end
 		end
 	end
 end
 
 function beltToChest(belt, laneNumber, chest, power)
 	if chest and chest.valid and power and power.valid and power.energy >= energy_per_action then
-		local items = belt.get_transport_line(laneNumber).get_contents()
-		for item, size in pairs(items) do
-			local itemstack = {name=item, count=math.min(inputMultiplier,size)}
-			if chest and chest.valid and chest.can_insert(itemstack) then
-				itemstack.count = chest.insert(itemstack)
-				belt.get_transport_line(laneNumber).remove_item(itemstack)
-				power.energy = power.energy - energy_per_action		
+		if belt.get_transport_line(laneNumber).can_insert_at(0) == false then
+			local items = belt.get_transport_line(laneNumber).get_contents()
+			for item, size in pairs(items) do
+				local itemstack = {name=item, count=math.min(inputMultiplier,size)}
+				if chest and chest.valid and chest.can_insert(itemstack) then
+					itemstack.count = chest.insert(itemstack)
+					belt.get_transport_line(laneNumber).remove_item(itemstack)
+					power.energy = power.energy - energy_per_action
+				end
+				break
 			end
-			break
 		end
 	end
 end
 
+local beltPositions = {.159, .44, .72, 1}
+--local beltPositions = {0, .28, .56, .841}
+--local beltPositions = {.72, 1}
+local splitterPositions = {0, .28}
+
 function chestToBelt(belt, laneNumber, chest, power)
 	if chest and chest.valid and power and power.valid and power.energy >= energy_per_action then
+		local positions = {}
 		local _inventory = chest.get_inventory(1).get_contents()
 		for item, size in pairs(_inventory) do
 			local itemstack = {name=item, count=1}
-			if belt.get_transport_line(laneNumber).insert_at_back(itemstack) then
-				chest.get_inventory(1).remove(itemstack)
-				power.energy = power.energy - energy_per_action
+			if belt.type == "transport-belt" then
+				positions = beltPositions
+			else
+				positions = splitterPositions
+			end
+			if belt.get_transport_line(laneNumber).can_insert_at(positions[1]) then
+				for i=1, math.min(#positions, size) do
+					if belt.get_transport_line(laneNumber).insert_at(positions[i], itemstack) then
+						chest.get_inventory(1).remove(itemstack)
+						power.energy = power.energy - energy_per_action
+					end
+				end
 			end
 			break
 		end
@@ -437,49 +456,49 @@ function chestToBelt(belt, laneNumber, chest, power)
 end
 
 function sourceToTargetInventory(source, target, power)
-  if source and source.valid and power and power.valid and power.energy >= energy_per_action then
-	  local _inventory = source.get_inventory(1).get_contents()
-	  for item, size in pairs(_inventory) do
-		local itemstack = {name=item, count=math.min(maxStackSize,size)}
-		if target and target.valid and target.can_insert(itemstack) then
-			itemstack.count = target.insert(itemstack)
-			source.get_inventory(1).remove(itemstack)
-			power.energy = power.energy - energy_per_action
+	if source and source.valid and power and power.valid and power.energy >= energy_per_action then
+		local _inventory = source.get_inventory(1).get_contents()
+		for item, size in pairs(_inventory) do
+			local itemstack = {name=item, count=math.min(maxStackSize,size)}
+			if target and target.valid and target.can_insert(itemstack) then
+				itemstack.count = target.insert(itemstack)
+				source.get_inventory(1).remove(itemstack)
+				power.energy = power.energy - energy_per_action
+			end
+			break
 		end
-		break
-	  end
 	end
 end
 
 function getInputBelts(grid)
 	local belts = {}
 	local belt
-	
+
 	-- North
 	belt = checkTransportEntity(grid.north, SOUTH, "output")
-	if belt then  
+	if belt then
 		belts[#belts+1] = belt
 	end
-	
+
 	-- South
 	belt = checkTransportEntity(grid.south, NORTH, "output")
-	if belt then   
+	if belt then
 		belts[#belts+1] = belt
 	end
-	
+
 	-- East
 	belt = checkTransportEntity(grid.east, WEST, "output")
-	if belt then   
+	if belt then
 		belts[#belts+1] = belt
 	end
-	
+
 	-- West
 	belt = checkTransportEntity(grid.west, EAST, "output")
 	if belt then
 		belts[#belts+1] = belt
 	end
 	
-    return belts 
+	return belts
 end
 
 function getOutputBelts(grid)
@@ -531,7 +550,7 @@ function getOutputBelts(grid)
 			belts[#belts+1] = belt
 		end
 	end
-	
+
 	-- West
 	belt = checkTransportEntity(grid.west, WEST, "input")
 	if belt then
@@ -546,7 +565,7 @@ function getOutputBelts(grid)
 		end
 	end
 	
-    return belts 
+	return belts
 end
 
 function getInventories(grid)
@@ -558,49 +577,49 @@ function getInventories(grid)
 	if inventory then
 		inventories[#inventories+1] = inventory
 	end
-	
+
 	-- South
-	inventory  = grid.south
+	inventory = grid.south
 	if inventory then
 		inventories[#inventories+1] = inventory
 	end
-	
+
 	-- East
 	inventory = grid.east
 	if inventory then
 		inventories[#inventories+1] = inventory
 	end
-	
+
 	--West
 	inventory = grid.west
 	if inventory then
 		inventories[#inventories+1] = inventory
 	end
-	
+
 	-- North East
 	inventory = grid.northEast
 	if inventory then
 		inventories[#inventories+1] = inventory
 	end
-	
+
 	-- South East
-	inventory  = grid.southEast
+	inventory = grid.southEast
 	if inventory then
 		inventories[#inventories+1] = inventory
 	end
-	
+
 	-- North West
 	inventory = grid.northWest
 	if inventory then
 		inventories[#inventories+1] = inventory
 	end
-	
+
 	-- South West
 	inventory = grid.southWest
 	if inventory then
 		inventories[#inventories+1] = inventory
 	end
-	
+
 	return inventories
 end
 
@@ -621,7 +640,7 @@ function isInventory (entity)
 end
 
 function isTrain (entity)
-	if entity and ((entity.type == "cargo-wagon" and entity.train.speed == 0) or (entity.type == "locomotive"  and entity.train.speed == 0) or isWarehouse(entity)) then
+	if entity and ((entity.type == "cargo-wagon" and entity.train.speed == 0) or (entity.type == "locomotive" and entity.train.speed == 0) or isWarehouse(entity)) then
 		return entity
 	else
 		return nil
@@ -629,7 +648,7 @@ function isTrain (entity)
 end
 
 function isWarehouse(entity)
-	if entity and (entity.name == "warehouse-basic" or entity.name == "warehouse-smart" or entity.name == "warehouse-storage" or entity.name == "warehouse-smart-passive-provider" or entity.name == "warehouse-active-provider" or entity.name == "warehouse-requestor")  then
+	if entity and (entity.name == "warehouse-basic" or entity.name == "warehouse-smart" or entity.name == "warehouse-storage" or entity.name == "warehouse-smart-passive-provider" or entity.name == "warehouse-active-provider" or entity.name == "warehouse-requestor") then
 		return entity
 	else
 		return nil

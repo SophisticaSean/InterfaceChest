@@ -20,5 +20,16 @@ data:extend(
 		place_result = "interface-chest-trash",
 		stack_size = 50
 		}
+		,
+		{
+		type = "item",
+		name = "interface-belt-balancer",
+		icon = "__InterfaceChest__/graphics/icon/belt-balancer.png",
+		flags = {"goes-to-quickbar"},
+		subgroup = "belt",
+		order = "a[transport-belt]-d[interface-belt-balancer]",
+		place_result = "interface-belt-balancer",
+		stack_size = 50
+		}
 	}
 )

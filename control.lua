@@ -8,7 +8,9 @@ local railCheckThrottle = 120
 local voidThrottle = 180
 local energy_per_action = 8000
 local idleDraw = 500
-local dataVersion = 3
+
+-- Internal Use
+local dataVersion = 4
 
 -- How many a chest can pull from a belt lane 0-8
 local inputMultiplier = 8
@@ -33,10 +35,15 @@ function getBoundingBox(position, radius)
 end
 
 -------------------
-function InterfaceChest_Initialize(event)	
+function InterfaceChest_Initialize()	
 	if global.InterfaceChest_MasterList == nil then
 		global.InterfaceChest_MasterList = {}
 	end
+	
+	if global.InterfaceBelt_MasterList == nil then
+		global.InterfaceBelt_MasterList = {}
+	end
+	
 	if global.InterfaceChest_DataVersion == nil then
 		global.InterfaceChest_DataVersion = dataVersion
 	end
@@ -45,11 +52,18 @@ end
 -------------------
 function InterfaceChest_Create(event)
 	local entity = event.created_entity
+	
 	if entity.name == "interface-chest" or entity.name == "interface-chest-trash" then
 		local nextIndex = #global.InterfaceChest_MasterList+1
-		global.InterfaceChest_MasterList[nextIndex] = updateInterfaceChest(entity)
-		--debugPrint("Interface Chest count: " .. nextIndex)
+		global.InterfaceChest_MasterList[nextIndex] = updateInterfaceChest(entity)		
 	end
+	
+	if entity.name == "interface-belt-balancer" then
+		local nextIndex = #global.InterfaceBelt_MasterList+1
+		global.InterfaceBelt_MasterList[nextIndex] = entity
+		--debugPrint("Interface Belt count: " .. nextIndex)
+	end
+	
 	if isTransport(entity) or isInventory(entity) then
 		handleChange(entity, 2)
 	end
@@ -97,8 +111,69 @@ function handleChange (entity, range)
 end
 
 -------------------
+function InterfaceBelt_RunStep()
+	if global.InterfaceChest_DataVersion ~= dataVersion then
+		-- Initialize
+		InterfaceChest_Initialize()
+		
+		local beltBalancer = game.get_surface(1).find_entities_filtered{area={{-5000, -5000},{5000, 5000}}, name="interface-belt-balancer"}
+		local masterList = {}
+		for index=1, #beltBalancer do
+			local belt = beltBalancer[index]
+			masterList[#masterList+1] = belt
+		end
+		
+		global.InterfaceBelt_MasterList = masterList
+		global.InterfaceChest_DataVersion = dataVersion	
+	else
+		local masterList = global.InterfaceBelt_MasterList
+		local beltsToDelete = {}
+		for index=1, #masterList do
+			local stagger = game.tick + index
+			if 0 == (stagger % 4)  then 
+				local belt = masterList[index]
+				if belt and belt.valid then
+					local left = belt.get_transport_line(1)
+					local right = belt.get_transport_line(2)
+					local action = false
+					if balanceBelt(left, right) == false then
+						balanceBelt(right, left)
+					end
+				else
+					beltsToDelete[#beltsToDelete+1] = index
+				end
+			end
+		end
+		-- Clean up Dead Belts
+		for index=1, #beltsToDelete do			
+			local deleteKey = beltsToDelete[index]
+			table.remove(global.InterfaceBelt_MasterList, deleteKey)			
+		end
+	end
+end
+
+function balanceBelt (source, target)
+	local action = false
+	for item, size in pairs(source.get_contents()) do
+		local diff = size - target.get_item_count(item)
+		local itemstack = {name=item, count=1}
+		if diff > 1 and size > 1 then
+			if target.insert_at_back(itemstack) then
+				source.remove_item(itemstack)
+				action = true
+			end
+		end
+	end
+	return action
+end
+
+-------------------
 function InterfaceChest_RunStep(event)
 	if global.InterfaceChest_DataVersion ~= dataVersion then
+		
+		-- Initialize
+		InterfaceChest_Initialize()
+
 		-- Find all this mod's chests and index them
 		local trashCan = game.get_surface(1).find_entities_filtered{area={{-5000, -5000},{5000, 5000}}, name="interface-chest-trash"}
 		local interfaceChests = game.get_surface(1).find_entities_filtered{area={{-5000, -5000},{5000, 5000}}, name="interface-chest"}
@@ -116,6 +191,7 @@ function InterfaceChest_RunStep(event)
 		global.InterfaceChest_MasterList = masterList
 		global.InterfaceChest_DataVersion = dataVersion	
 	else
+		InterfaceBelt_RunStep()
 		local masterList = global.InterfaceChest_MasterList
 		local chestsToDelete = {}
 		for index=1, #masterList do

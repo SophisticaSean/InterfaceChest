@@ -26,5 +26,17 @@ data:extend(
 			},
 		result = "interface-chest-trash"
 		}
+		,
+		{
+		type = "recipe",
+		name = "interface-belt-balancer",
+		enabled = "false",
+		ingredients =
+			{
+			  {"express-splitter", 1},
+			  {"express-transport-belt", 4},
+			},
+		result = "interface-belt-balancer"
+		}
 	}
 )

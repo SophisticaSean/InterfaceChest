@@ -78,7 +78,7 @@ function InterfaceChest_Create(event)
 		--debugPrint("Interface Belt count: " .. nextIndex)
 	end
 
-	if isTransport(entity) or isInventory(entity) then
+	if isTransport(entity) or isInventory(entity) or entity.type == "straight-rail" then
 		handleChange(entity, 3)
 	end
 end
@@ -86,14 +86,14 @@ end
 -------------------
 function InterfaceChest_Rotated(event)
 	local entity = event.entity 
-	if isTransport(entity) or isInventory(entity) then
+	if isTransport(entity) or isInventory(entity) or entity.type == "straight-rail" then
 		handleChange(entity, 3)
 	end
 end
 
 function InterfaceChest_Mined(event)
 	local entity = event.entity 
-	if isTransport(entity) or isInventory(entity) then
+	if isTransport(entity) or isInventory(entity) or entity.type == "straight-rail" then
 		scheduleUpdate(entity, 3)
 	end
 end
@@ -254,7 +254,7 @@ function InterfaceChest_RunStep(event)
 									end
 								end
 
-								-- Input Items from adjacent Inventories
+								-- Pull Items from adjacent Inventories
 								if #interfaceChest.inputBelts == 0 and #interfaceChest.outputBelts > 0 then
 									for i=1, #interfaceChest.inventories do
 										local inventory = interfaceChest.inventories[i]
@@ -325,57 +325,66 @@ function updateInterfaceChest(chest)
 	local isRail = false
 	local powerDraw
 	
-	for index=1, #entitiesX do
-		local entity = entitiesX[index]
-		-- East
-		if entity.position.x > center[2].x then
-			if isTransport(entity) then gridTransport.east = entity end
-			if isInventory(entity) then gridInventory.east = entity end
-		-- West
-		elseif entity.position.x < center[1].x then
-			if isTransport(entity) then gridTransport.west = entity end
-			if isInventory(entity) then gridInventory.west = entity end
-		end
-	end
-	
-	for index=1, #entitiesY do
-		local entity = entitiesY[index]
-		-- North
-		if entity.position.y < center[1].y then
-			if isTransport(entity) then gridTransport.north = entity end
-			if isInventory(entity) then gridInventory.north = entity end
-		-- South
-		elseif entity.position.y > center[2].y then
-			if isTransport(entity) then gridTransport.south = entity end
-			if isInventory(entity) then gridInventory.south = entity end
-		end
-	end
-
-	for index=1, #entities do 
+	for index=1, #entities do
 		local entity = entities[index]
 		if entity.type ~= "decorative" then
 			if isRail == false and entity.type == "straight-rail" then
 				isRail = true
 			elseif entity.name == "interface-chest-power" and entity.position.x >= center[1].x and entity.position.x <= center[2].x and entity.position.y >= center[1].y and entity.position.y <= center[2].y then
 				powerDraw = entity
-			else
-				-- North West
-				if entity.position.x <= center[1].x and entity.position.y <= center[1].y then
-					if isTransport(entity) then gridTransport.northWest = entity end
-					if isTrain(entity) then gridInventory.northWest = entity end
-				-- North East
-				elseif entity.position.x >= center[2].x and entity.position.y <= center[1].y then
-					if isTransport(entity) then gridTransport.northEast = entity end
-					if isTrain(entity) then gridInventory.northEast = entity end
-				-- South West
-				elseif entity.position.x <= center[1].x and entity.position.y >= center[2].y then
-					if isTransport(entity) then gridTransport.southWest = entity end
-					if isTrain(entity) then gridInventory.southWest = entity end
-				-- South East
-				elseif entity.position.x >= center[2].x and entity.position.y >= center[2].y then
-					if isTransport(entity) then gridTransport.southEast = entity end
-					if isTrain(entity) then gridInventory.southEast = entity end
-				end
+			end
+		end
+	end
+	
+	for index=1, #entitiesX do
+		local entity = entitiesX[index]
+		if entity.type ~= "decorative" then
+			-- East
+			if entity.position.x > center[2].x then
+				if isTransport(entity) then gridTransport.east = entity end
+				if isInventory(entity, isRail) then gridInventory.east = entity end
+			-- West
+			elseif entity.position.x < center[1].x then
+				if isTransport(entity) then gridTransport.west = entity end
+				if isInventory(entity, isRail) then gridInventory.west = entity end
+			end
+		end
+	end
+	
+	for index=1, #entitiesY do
+		local entity = entitiesY[index]
+		if entity.type ~= "decorative" then
+			-- North
+			if entity.position.y < center[1].y then
+				if isTransport(entity) then gridTransport.north = entity end
+				if isInventory(entity, isRail) then gridInventory.north = entity end
+			-- South
+			elseif entity.position.y > center[2].y then
+				if isTransport(entity) then gridTransport.south = entity end
+				if isInventory(entity, isRail) then gridInventory.south = entity end
+			end
+		end
+	end
+
+	for index=1, #entities do 
+		local entity = entities[index]
+		if entity.type ~= "decorative" then
+			-- North West
+			if entity.position.x <= center[1].x and entity.position.y <= center[1].y then
+				if isTransport(entity) then gridTransport.northWest = entity end
+				if isTrain(entity, isRail) then gridInventory.northWest = entity end
+			-- North East
+			elseif entity.position.x >= center[2].x and entity.position.y <= center[1].y then
+				if isTransport(entity) then gridTransport.northEast = entity end
+				if isTrain(entity, isRail) then gridInventory.northEast = entity end
+			-- South West
+			elseif entity.position.x <= center[1].x and entity.position.y >= center[2].y then
+				if isTransport(entity) then gridTransport.southWest = entity end
+				if isTrain(entity, isRail) then gridInventory.southWest = entity end
+			-- South East
+			elseif entity.position.x >= center[2].x and entity.position.y >= center[2].y then
+				if isTransport(entity) then gridTransport.southEast = entity end
+				if isTrain(entity, isRail) then gridInventory.southEast = entity end
 			end
 		end
 	end
@@ -657,25 +666,25 @@ function checkTransportEntity(entity, direction, undergroundType)
 	end
 end
 
-function isInventory (entity)
-	--if entity and (entity.type == "logistic-container"  or entity.type == "assembling-machine" or isWarehouse(entity) or (entity.type == "smart-container" and entity.name ~= "interface-chest") or isTrain(entity)) then
-	if entity and (entity.name ~= "interface-chest" and entity.get_output_inventory() ~= nil) then
+function isInventory (entity, onTrack)
+	if entity and entity.name ~= "interface-chest" and entity.get_output_inventory() ~= nil and (isMoveable(entity) == false or isTrain(entity, onTrack)) then
 		return entity
 	else
 		return nil
 	end
 end
 
-function isTrain (entity)
-	if entity and ((entity.type == "cargo-wagon" and entity.train.speed == 0) or (entity.type == "locomotive" and entity.train.speed == 0)) then
-		return entity
+function isMoveable (entity)
+	if (entity.type == "cargo-wagon" or entity.type == "locomotive" or entity.type == "car" or entity.type == "player") then
+		return true
 	else
-		return nil
+		return false
 	end
 end
 
-function isWarehouse(entity)
-	if entity and (entity.name == "warehouse-basic" or entity.name == "warehouse-smart" or entity.name == "warehouse-storage" or entity.name == "warehouse-smart-passive-provider" or entity.name == "warehouse-active-provider" or entity.name == "warehouse-requestor") then
+--or (entity.type == "player" and entity.walking_state == false)
+function isTrain (entity, onTrack)
+	if entity and onTrack and ((entity.type == "cargo-wagon" and entity.train.speed == 0) or (entity.type == "locomotive" and entity.train.speed == 0) or (entity.type == "car" and entity.speed == 0)) then
 		return entity
 	else
 		return nil

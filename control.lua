@@ -36,6 +36,18 @@ function getBoundingBox(position, radius)
 	return {{x=position.x-radius-.5,y=position.y-radius-.5},{x=position.x+radius+.5,y=position.y+radius+.5}}
 end
 
+-- Area around tile
+function getBoundingBoxX(position, radius)
+	return {{x=position.x-radius-.5,y=position.y-.5},{x=position.x+radius+.5,y=position.y+.5}}
+end
+
+
+-- Area around tile
+function getBoundingBoxY(position, radius)
+	return {{x=position.x-.5,y=position.y-radius-.5},{x=position.x+.5,y=position.y+radius+.5}}
+end
+
+
 -------------------
 function InterfaceChest_Initialize()
 	if global.InterfaceChest_MasterList == nil then
@@ -67,7 +79,7 @@ function InterfaceChest_Create(event)
 	end
 
 	if isTransport(entity) or isInventory(entity) then
-		handleChange(entity, 2)
+		handleChange(entity, 3)
 	end
 end
 
@@ -75,14 +87,14 @@ end
 function InterfaceChest_Rotated(event)
 	local entity = event.entity 
 	if isTransport(entity) or isInventory(entity) then
-		handleChange(entity, 2)
+		handleChange(entity, 3)
 	end
 end
 
 function InterfaceChest_Mined(event)
 	local entity = event.entity 
 	if isTransport(entity) or isInventory(entity) then
-		scheduleUpdate(entity, 2)
+		scheduleUpdate(entity, 3)
 	end
 end
 
@@ -246,8 +258,12 @@ function InterfaceChest_RunStep(event)
 								if #interfaceChest.inputBelts == 0 and #interfaceChest.outputBelts > 0 then
 									for i=1, #interfaceChest.inventories do
 										local inventory = interfaceChest.inventories[i]
-										if inventory and inventory.valid and inventory.get_inventory(1).is_empty() == false then
-											sourceToTargetInventory(inventory, interfaceChest.chest, interfaceChest.power)
+										local inventoryIndex = 1
+										if inventory and inventory.valid then
+											--if inventory.type == "assembling-machine" then inventoryIndex = defines.inventory.assembling_machine_output end
+											if inventory.get_output_inventory() and inventory.get_output_inventory().is_empty() == false then
+												sourceToTargetInventory(inventory, interfaceChest.chest, interfaceChest.power)
+											end
 										end
 									end
 								end
@@ -302,10 +318,38 @@ end
 function updateInterfaceChest(chest)
 	local center = getBoundingBox(chest.position, 0)
 	local entities = game.get_surface(1).find_entities(getBoundingBox(chest.position, 1))
+	local entitiesX = game.get_surface(1).find_entities(getBoundingBoxX(chest.position, 1))
+	local entitiesY = game.get_surface(1).find_entities(getBoundingBoxY(chest.position, 1))
 	local gridTransport = {}
 	local gridInventory = {}
 	local isRail = false
 	local powerDraw
+	
+	for index=1, #entitiesX do
+		local entity = entitiesX[index]
+		-- East
+		if entity.position.x > center[2].x then
+			if isTransport(entity) then gridTransport.east = entity end
+			if isInventory(entity) then gridInventory.east = entity end
+		-- West
+		elseif entity.position.x < center[1].x then
+			if isTransport(entity) then gridTransport.west = entity end
+			if isInventory(entity) then gridInventory.west = entity end
+		end
+	end
+	
+	for index=1, #entitiesY do
+		local entity = entitiesY[index]
+		-- North
+		if entity.position.y < center[1].y then
+			if isTransport(entity) then gridTransport.north = entity end
+			if isInventory(entity) then gridInventory.north = entity end
+		-- South
+		elseif entity.position.y > center[2].y then
+			if isTransport(entity) then gridTransport.south = entity end
+			if isInventory(entity) then gridInventory.south = entity end
+		end
+	end
 
 	for index=1, #entities do 
 		local entity = entities[index]
@@ -315,24 +359,6 @@ function updateInterfaceChest(chest)
 			elseif entity.name == "interface-chest-power" and entity.position.x >= center[1].x and entity.position.x <= center[2].x and entity.position.y >= center[1].y and entity.position.y <= center[2].y then
 				powerDraw = entity
 			else
-				-- North
-				if entity.position.x >= center[1].x and entity.position.x <= center[2].x and entity.position.y < center[1].y then
-					if isTransport(entity) then gridTransport.north = entity end
-					if isInventory(entity) then gridInventory.north = entity end
-				-- South
-				elseif entity.position.x >= center[1].x and entity.position.x <= center[2].x and entity.position.y > center[2].y then
-					if isTransport(entity) then gridTransport.south = entity end
-					if isInventory(entity) then gridInventory.south = entity end
-				-- East
-				elseif entity.position.x > center[2].x and entity.position.y >= center[1].y and entity.position.y <= center[2].y then
-					if isTransport(entity) then gridTransport.east = entity end
-					if isInventory(entity) then gridInventory.east = entity end
-				-- West
-				elseif entity.position.x < center[1].x and entity.position.y >= center[1].y and entity.position.y <= center[2].y then
-					if isTransport(entity) then gridTransport.west = entity end
-					if isInventory(entity) then gridInventory.west = entity end
-				end
-
 				-- North West
 				if entity.position.x <= center[1].x and entity.position.y <= center[1].y then
 					if isTransport(entity) then gridTransport.northWest = entity end
@@ -434,35 +460,35 @@ local splitterPositions = {0, .28}
 function chestToBelt(belt, laneNumber, chest, power)
 	if chest and chest.valid and power and power.valid and power.energy >= energy_per_action then
 		local positions = {}
-		local _inventory = chest.get_inventory(1).get_contents()
-		for item, size in pairs(_inventory) do
-			local itemstack = {name=item, count=1}
-			if belt.type == "transport-belt" then
-				positions = beltPositions
-			else
-				positions = splitterPositions
-			end
-			if belt.get_transport_line(laneNumber).can_insert_at(positions[1]) then
+		if belt.type == "transport-belt" then
+			positions = beltPositions
+		else
+			positions = splitterPositions
+		end
+		if belt.get_transport_line(laneNumber).can_insert_at(positions[1]) then
+			local _inventory = chest.get_inventory(1).get_contents()
+			for item, size in pairs(_inventory) do
+				local itemstack = {name=item, count=1}
 				for i=1, math.min(#positions, size) do
 					if belt.get_transport_line(laneNumber).insert_at(positions[i], itemstack) then
 						chest.get_inventory(1).remove(itemstack)
 						power.energy = power.energy - energy_per_action
 					end
 				end
+				break
 			end
-			break
 		end
 	end
 end
 
 function sourceToTargetInventory(source, target, power)
 	if source and source.valid and power and power.valid and power.energy >= energy_per_action then
-		local _inventory = source.get_inventory(1).get_contents()
+		local _inventory = source.get_output_inventory().get_contents()
 		for item, size in pairs(_inventory) do
 			local itemstack = {name=item, count=math.min(maxStackSize,size)}
 			if target and target.valid and target.can_insert(itemstack) then
 				itemstack.count = target.insert(itemstack)
-				source.get_inventory(1).remove(itemstack)
+				source.get_output_inventory().remove(itemstack)
 				power.energy = power.energy - energy_per_action
 			end
 			break
@@ -632,7 +658,8 @@ function checkTransportEntity(entity, direction, undergroundType)
 end
 
 function isInventory (entity)
-	if entity and (entity.type == "logistic-container" or (entity.type == "smart-container" and entity.name ~= "interface-chest") or isTrain(entity)) then
+	--if entity and (entity.type == "logistic-container"  or entity.type == "assembling-machine" or isWarehouse(entity) or (entity.type == "smart-container" and entity.name ~= "interface-chest") or isTrain(entity)) then
+	if entity and (entity.name ~= "interface-chest" and entity.get_output_inventory() ~= nil) then
 		return entity
 	else
 		return nil
@@ -640,7 +667,7 @@ function isInventory (entity)
 end
 
 function isTrain (entity)
-	if entity and ((entity.type == "cargo-wagon" and entity.train.speed == 0) or (entity.type == "locomotive" and entity.train.speed == 0) or isWarehouse(entity)) then
+	if entity and ((entity.type == "cargo-wagon" and entity.train.speed == 0) or (entity.type == "locomotive" and entity.train.speed == 0)) then
 		return entity
 	else
 		return nil

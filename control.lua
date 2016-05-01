@@ -12,7 +12,7 @@ local idleDraw = 500
 local beltBalancerThrottle = 6
 
 -- Internal Use
-local dataVersion = 4
+local dataVersion = 8
 
 -- How many a chest can pull from a belt lane 0-8
 local inputMultiplier = 8
@@ -54,32 +54,48 @@ function InterfaceChest_Initialize()
 		global.InterfaceChest_MasterList = {}
 	end
 	
+	if global.InterfaceChest_DataVersion == nil then
+		global.InterfaceChest_DataVersion = 0
+	end
+	
 	if global.InterfaceBelt_MasterList == nil then
 		global.InterfaceBelt_MasterList = {}
 	end
 	
-	if global.InterfaceChest_DataVersion == nil then
-		global.InterfaceChest_DataVersion = dataVersion
+	if global.InterfaceBelt_DataVersion == nil then
+		global.InterfaceBelt_DataVersion = 0
 	end
 end
 
 -------------------
+function getKey (position)
+	return "if_x" .. position.x .. "y".. position.y
+end
+
 function InterfaceChest_Create(event)
 	local entity = event.created_entity
-	if entity.name == "interface-chest" or entity.name == "interface-chest-trash" then
-		local nextIndex = #global.InterfaceChest_MasterList+1
-		global.InterfaceChest_MasterList[nextIndex] = updateInterfaceChest(entity)
-		--debugPrint("Interface Chest created: " .. nextIndex)
+	if isInterfaceChest(entity) then
+		local modTick = game.tick % chestThrottle
+		local key = getKey(entity.position)
+		if global.InterfaceChest_MasterList[modTick] == nil then
+			global.InterfaceChest_MasterList[modTick] = {}
+		end
+		global.InterfaceChest_MasterList[modTick][key] = updateInterfaceChest(entity)
+		--debugPrint("Interface Chest created: " .. key)
 	end
 
 	if entity.name == "interface-belt-balancer" then
-		local nextIndex = #global.InterfaceBelt_MasterList+1
-		global.InterfaceBelt_MasterList[nextIndex] = entity
-		--debugPrint("Interface Belt count: " .. nextIndex)
+		local key = getKey(entity.position)
+		local modTick = game.tick % beltBalancerThrottle
+		if global.InterfaceBelt_MasterList[modTick] == nil then
+			global.InterfaceBelt_MasterList[modTick] = {}
+		end
+		global.InterfaceBelt_MasterList[modTick][key] = entity
+		--debugPrint("Interface Belt count: " .. key)
 	end
 
 	if isTransport(entity) or isInventory(entity) or entity.type == "straight-rail" then
-		handleChange(entity, 3)
+		scheduleUpdate(entity, 3)
 	end
 end
 
@@ -87,7 +103,7 @@ end
 function InterfaceChest_Rotated(event)
 	local entity = event.entity 
 	if isTransport(entity) or isInventory(entity) or entity.type == "straight-rail" then
-		handleChange(entity, 3)
+		scheduleUpdate(entity, 3)
 	end
 end
 
@@ -100,74 +116,58 @@ end
 
 -------------------
 function scheduleUpdate (entity, range)
-	local masterList = global.InterfaceChest_MasterList
-	for index=1, #masterList do
-		local interfaceChest = masterList[index]
-		local chest = interfaceChest.chest
-		if chest and chest.valid and math.abs(chest.position.x - entity.position.x) < range and math.abs(chest.position.y - entity.position.y) < range then
-			global.InterfaceChest_MasterList[index].dirty = true
-			--debugPrint( entity.name .. " " .. serpent.block(entity.position))
-		end
-	end
-end
-
--------------------
-function handleChange (entity, range)
-	local masterList = global.InterfaceChest_MasterList
-	for index=1, #masterList do
-		local interfaceChest = masterList[index]
-		local chest = interfaceChest.chest
-		--debugPrint( entity.name .. " " .. serpent.block(entity.position))
-		if chest and chest.valid and math.abs(chest.position.x - entity.position.x) < range and math.abs(chest.position.y - entity.position.y) < range then
-			global.InterfaceChest_MasterList[index] = updateInterfaceChest(interfaceChest.chest)
+	local entities = entity.surface.find_entities(getBoundingBox(entity.position, range))
+	for index=1, #entities do
+		if isInterfaceChest( entities[index]) then
+			local chest = entities[index]
+			if chest and chest.valid then
+				for modTick=0, chestThrottle-1 do
+					if global.InterfaceChest_MasterList[modTick][getKey(chest.position)] then 
+						global.InterfaceChest_MasterList[modTick][getKey(chest.position)].dirty = true 
+					end
+				end
+			end
 		end
 	end
 end
 
 -------------------
 function InterfaceBelt_RunStep()
-	if global.InterfaceChest_DataVersion ~= dataVersion then
+	if global.InterfaceBelt_DataVersion ~= dataVersion then
 		-- Initialize
 		InterfaceChest_Initialize()
 
-		local beltBalancer = game.get_surface(1).find_entities_filtered{area={{-5000, -5000},{5000, 5000}}, name="interface-belt-balancer"}
+		local beltBalancer = game.get_surface(1).find_entities_filtered{area={{-10000, -10000},{10000, 10000}}, name="interface-belt-balancer"}
+		
 		local masterList = {}
+		for index=0, beltBalancerThrottle-1 do
+			masterList[index] = {}
+		end
+		
 		for index=1, #beltBalancer do
-			local belt = beltBalancer[index]
-			masterList[#masterList+1] = belt
+			local entity = beltBalancer[index]
+			local modTick = math.random(beltBalancerThrottle) - 1
+			masterList[modTick][getKey(entity.position)] = entity
 		end
 
 		global.InterfaceBelt_MasterList = masterList
-		global.InterfaceChest_DataVersion = dataVersion
+		global.InterfaceBelt_DataVersion = dataVersion
 
 	else
-		local listChange = false
-		local masterList = global.InterfaceBelt_MasterList
-		for index=1, #masterList do
-			local stagger = game.tick + index
-			if 0 == (stagger % beltBalancerThrottle) then
-				local belt = masterList[index]
+		local modTick = game.tick % beltBalancerThrottle
+		local masterList = global.InterfaceBelt_MasterList[modTick]
+		if masterList then
+			for index, value in pairs(masterList) do
+				local belt = value
 				if belt and belt.valid then
 					local left = belt.get_transport_line(1)
 					local right = belt.get_transport_line(2)
 					balanceBelt(right, left)
 					balanceBelt(left, right)
 				else
-					listChange = true
-					masterList[index] = "remove"
+					global.InterfaceBelt_MasterList[modTick][index] = nil
 				end
 			end
-		end
-		if listChange then
-			local returnList = {}
-			for index=1, #masterList do
-			local belt = masterList[index]
-				if masterList[index] ~= "remove" then
-					table.insert(returnList, belt)
-				end
-			end
-			debugPrint("Return: " .. #returnList )
-			global.InterfaceBelt_MasterList = returnList
 		end
 	end
 end
@@ -195,46 +195,50 @@ function InterfaceChest_RunStep(event)
 		InterfaceChest_Initialize()
 
 		-- Find all this mod's chests and index them
-		local trashCan = game.get_surface(1).find_entities_filtered{area={{-5000, -5000},{5000, 5000}}, name="interface-chest-trash"}
-		local interfaceChests = game.get_surface(1).find_entities_filtered{area={{-5000, -5000},{5000, 5000}}, name="interface-chest"}
+		local trashCan = game.get_surface(1).find_entities_filtered{area={{-10000, -10000},{10000, 10000}}, name="interface-chest-trash"}
+		local interfaceChests = game.get_surface(1).find_entities_filtered{area={{-10000, -10000},{10000, 10000}}, name="interface-chest"}
+
 		local masterList = {}
+		for index=0, chestThrottle-1 do
+			masterList[index] = {}
+		end
+
 		for index=1, #trashCan do
+			local modTick = math.random(chestThrottle) - 1
 			local chest = trashCan[index]
-			masterList[#masterList+1] = updateInterfaceChest(chest)
+			masterList[modTick][getKey(chest.position)] = updateInterfaceChest(chest)
 		end
 
 		for index=1, #interfaceChests do
+			local modTick = math.random(chestThrottle) - 1
 			local chest = interfaceChests[index]
-			masterList[#masterList+1] = updateInterfaceChest(chest)
+			masterList[modTick][getKey(chest.position)] = updateInterfaceChest(chest)
 		end
 
 		global.InterfaceChest_MasterList = masterList
-		global.InterfaceChest_DataVersion = dataVersion	
+		global.InterfaceChest_DataVersion = dataVersion
 	else
 		InterfaceBelt_RunStep()
-		local masterList = global.InterfaceChest_MasterList
+		local modTick = game.tick % chestThrottle
+		local masterList = global.InterfaceChest_MasterList[modTick]
 		local listChange = false
-		--debugPrint("Size: " .. #masterList)
-		for index=1, #masterList do
-			local interfaceChest = masterList[index]
-			local stagger = game.tick + index
-			if 0 == (stagger % chestThrottle) then
+		if masterList then
+			for index, value in pairs(masterList) do
+				local interfaceChest = value
 				if interfaceChest.chest and interfaceChest.chest.valid then
 					if interfaceChest.power == nil or interfaceChest.power.valid == false then
 						interfaceChest = updateInterfaceChest(interfaceChest.chest)
-						global.InterfaceChest_MasterList[index] = interfaceChest
+						global.InterfaceChest_MasterList[modTick][index] = interfaceChest
 						--debugPrint("Create missing power for: " .. index)
 					else
 						if interfaceChest.power and interfaceChest.power.valid and interfaceChest.power.energy >= (idleDraw) then
 							interfaceChest.power.energy = interfaceChest.power.energy - idleDraw
-
 							if interfaceChest.chest.name == "interface-chest-trash" then
-								voidChest(interfaceChest, stagger, index)
+								voidChest(interfaceChest, modTick, index)
 							else
 								-- No good way to check for nearby train, so if on rail check for train
-								if interfaceChest.onRail and 0 == (stagger % railCheckThrottle) then
-									interfaceChest = updateInterfaceChest(interfaceChest.chest)
-									global.InterfaceChest_MasterList[index] = interfaceChest
+								if interfaceChest.onRail and modTick == (game.tick % railCheckThrottle) then
+									interfaceChest.dirty = true
 								end
 
 								local chestPosition = getBoundingBox(interfaceChest.chest.position, 0)
@@ -248,6 +252,7 @@ function InterfaceChest_RunStep(event)
 									local belt = interfaceChest.inputBelts[i]
 									if belt.valid then
 										if belt.type == "splitter" then
+											local chestPosition = getBoundingBox(interfaceChest.chest.position, 0)
 											if (belt.position.x == chestPosition[1].x and belt.position.y < chestPosition[1].y) or (belt.position.x == chestPosition[2].x and belt.position.y > chestPosition[1].y) or (belt.position.y == chestPosition[1].y and belt.position.x > chestPosition[2].x) or (belt.position.y == chestPosition[2].y and belt.position.x < chestPosition[2].x) then
 												beltToChest(belt, defines.transport_line.left_split_line, interfaceChest.chest, interfaceChest.power)
 												beltToChest(belt, defines.transport_line.right_split_line, interfaceChest.chest, interfaceChest.power)
@@ -276,11 +281,12 @@ function InterfaceChest_RunStep(event)
 								end
 
 								-- Output items to adjacent Belts
-								if interfaceChest.chest.get_inventory(1).is_empty() == false then
+								if interfaceChest.chest.get_output_inventory().is_empty() == false then
 									for i=1, #interfaceChest.outputBelts do
 										local belt = interfaceChest.outputBelts[i]
 										if belt.valid then
 											if belt.type == "splitter" then
+												local chestPosition = getBoundingBox(interfaceChest.chest.position, 0)
 												if (belt.position.x == chestPosition[1].x and belt.position.y > chestPosition[1].y) or (belt.position.x == chestPosition[2].x and belt.position.y < chestPosition[1].y) or (belt.position.y == chestPosition[1].y and belt.position.x < chestPosition[2].x) or (belt.position.y == chestPosition[2].y and belt.position.x > chestPosition[2].x) then
 													chestToBelt(belt, defines.transport_line.left_line, interfaceChest.chest, interfaceChest.power)
 													chestToBelt(belt, defines.transport_line.right_line, interfaceChest.chest, interfaceChest.power)
@@ -294,7 +300,6 @@ function InterfaceChest_RunStep(event)
 											end
 										end
 									end
-
 									-- Output items to adjacent inventories
 									if #interfaceChest.outputBelts == 0 and #interfaceChest.inputBelts > 0 then
 										for i=1, #interfaceChest.inventories do 
@@ -303,46 +308,34 @@ function InterfaceChest_RunStep(event)
 										end
 									end
 								end
+								
 							end
 						end
 					end
 				else
-					if interfaceChest.power and interfaceChest.power.valid then
+					if interfaceChest ~= nil and interfaceChest.power and interfaceChest.power.valid then
 						if interfaceChest.power.destroy() then
 							--debugPrint("Power removed: " ..   index)
-							masterList[index] = "remove"
-							listChange = true
+							global.InterfaceChest_MasterList[modTick][index] = nil
 						end
 					end
+					--debugPrint("Loaded: " ..   index)
 				end
 			end
-		end
-		-- Clean up Dead Chests
-		if listChange then
-			local returnList = {}
-			--debugPrint("Size: " .. #masterList)
-			for index=1, #masterList do
-			local interfaceChest = masterList[index]
-				if masterList[index] ~= "remove" then
-					table.insert(returnList, interfaceChest)
-				end
-			end
-			--debugPrint("Size After: " .. #returnList)
-			global.InterfaceChest_MasterList = returnList
 		end
 	end
 end
 
 function updateInterfaceChest(chest)
 	local center = getBoundingBox(chest.position, 0)
-	local entities = game.get_surface(1).find_entities(getBoundingBox(chest.position, 1))
-	local entitiesX = game.get_surface(1).find_entities(getBoundingBoxX(chest.position, 1))
-	local entitiesY = game.get_surface(1).find_entities(getBoundingBoxY(chest.position, 1))
+	local entities = chest.surface.find_entities(getBoundingBox(chest.position, 1))
+	local entitiesX = chest.surface.find_entities(getBoundingBoxX(chest.position, 1))
+	local entitiesY = chest.surface.find_entities(getBoundingBoxY(chest.position, 1))
 	local gridTransport = {}
 	local gridInventory = {}
 	local isRail = false
-	local powerSource
-	
+	local powerSource = nil
+
 	for index=1, #entities do
 		local entity = entities[index]
 		if entity.type ~= "decorative" then
@@ -410,40 +403,38 @@ function updateInterfaceChest(chest)
 
 	if powerSource == nil then
 		--debugPrint("Create power: " .. serpent.block(chest.position))
-		powerSource = chest.surface.create_entity{name="interface-chest-power", position=chest.position, force=game.players[1].force}
+		powerSource = chest.surface.create_entity{name="interface-chest-power", position=chest.position, force=chest.force}
 	end
 
 	return {chest = chest, inputBelts = getInputBelts(gridTransport), outputBelts = getOutputBelts(gridTransport), inventories = getInventories(gridInventory), onRail = isRail, dirty = false, power = powerSource}
 end
 
-function voidChest(interfaceChest, stagger, index)
-	if 0 == (stagger % chestThrottle) then
-		if interfaceChest.chest and interfaceChest.chest.valid and interfaceChest.power and interfaceChest.power.valid and interfaceChest.power.energy >= energy_per_action then
-			if interfaceChest.dirty then
-				interfaceChest = updateInterfaceChest(interfaceChest.chest)
-				global.InterfaceChest_MasterList[index] = interfaceChest
-			end
+function voidChest(interfaceChest, modTick, index)
+	if interfaceChest.chest and interfaceChest.chest.valid and interfaceChest.power and interfaceChest.power.valid and interfaceChest.power.energy >= energy_per_action then
+		if interfaceChest.dirty then
+			interfaceChest = updateInterfaceChest(interfaceChest.chest)
+			global.InterfaceChest_MasterList[modTick][index] = interfaceChest
+		end
 
-			if 0 == (stagger % voidThrottle) then
-				interfaceChest.chest.get_inventory(1).clear()
-				interfaceChest.power.energy = interfaceChest.power.energy - energy_per_action
-			end
+		if modTick == (game.tick % voidThrottle) then
+			interfaceChest.chest.get_output_inventory().clear()
+			interfaceChest.power.energy = interfaceChest.power.energy - energy_per_action
+		end
 
-			for i=1, #interfaceChest.inputBelts do 
-				local belt = interfaceChest.inputBelts[i]
-				if belt.valid then
-					if belt.type == "splitter" then
-						if (belt.position.x > interfaceChest.chest.position.x and belt.position.y > interfaceChest.chest.position.y) or (belt.position.x < interfaceChest.chest.position.x and belt.position.y < interfaceChest.chest.position.y) then
-							beltToVoid(belt, defines.transport_line.left_split_line, interfaceChest.power)
-							beltToVoid(belt, defines.transport_line.right_split_line, interfaceChest.power)
-						else
-							beltToVoid(belt, defines.transport_line.secondary_left_split_line, interfaceChest.power)
-							beltToVoid(belt, defines.transport_line.secondary_right_split_line, interfaceChest.power)
-						end
+		for i=1, #interfaceChest.inputBelts do 
+			local belt = interfaceChest.inputBelts[i]
+			if belt.valid then
+				if belt.type == "splitter" then
+					if (belt.position.x > interfaceChest.chest.position.x and belt.position.y > interfaceChest.chest.position.y) or (belt.position.x < interfaceChest.chest.position.x and belt.position.y < interfaceChest.chest.position.y) then
+						beltToVoid(belt, defines.transport_line.left_split_line, interfaceChest.power)
+						beltToVoid(belt, defines.transport_line.right_split_line, interfaceChest.power)
 					else
-						beltToVoid(belt, defines.transport_line.left_line, interfaceChest.power)
-						beltToVoid(belt, defines.transport_line.right_line, interfaceChest.power)
+						beltToVoid(belt, defines.transport_line.secondary_left_split_line, interfaceChest.power)
+						beltToVoid(belt, defines.transport_line.secondary_right_split_line, interfaceChest.power)
 					end
+				else
+					beltToVoid(belt, defines.transport_line.left_line, interfaceChest.power)
+					beltToVoid(belt, defines.transport_line.right_line, interfaceChest.power)
 				end
 			end
 		end
@@ -454,8 +445,10 @@ end
 function beltToVoid(belt, laneNumber, power)
 	if power and power.valid and power.energy >= energy_per_action then
 		if belt.get_transport_line(laneNumber).can_insert_at(0) == false then
-			local lane = belt.get_transport_line(laneNumber).get_contents()
-			for item, size in pairs(lane) do
+			local items = belt.get_transport_line(laneNumber).get_contents()
+			local item = next(items)
+			local size = items[item]
+			if size then
 				local itemstack = {name=item, count=size}
 				belt.get_transport_line(laneNumber).remove_item(itemstack)
 				power.energy = power.energy - energy_per_action
@@ -467,15 +460,18 @@ end
 function beltToChest(belt, laneNumber, chest, power)
 	if chest and chest.valid and power and power.valid and power.energy >= energy_per_action then
 		if belt.get_transport_line(laneNumber).can_insert_at(0) == false then
-			local items = belt.get_transport_line(laneNumber).get_contents()
-			for item, size in pairs(items) do
+			local lane = belt.get_transport_line(laneNumber)
+			local contents = lane.get_contents()
+			local item = next(contents)
+			local size = contents[item]
+			--debugPrint(item .. " " .. size)
+			if size then
 				local itemstack = {name=item, count=math.min(inputMultiplier,size)}
 				if chest and chest.valid and chest.can_insert(itemstack) then
 					itemstack.count = chest.insert(itemstack)
-					belt.get_transport_line(laneNumber).remove_item(itemstack)
+					lane.remove_item(itemstack)
 					power.energy = power.energy - energy_per_action
 				end
-				break
 			end
 		end
 	end
@@ -495,16 +491,19 @@ function chestToBelt(belt, laneNumber, chest, power)
 			positions = splitterPositions
 		end
 		if belt.get_transport_line(laneNumber).can_insert_at(positions[1]) then
-			local _inventory = chest.get_inventory(1).get_contents()
-			for item, size in pairs(_inventory) do
-				local itemstack = {name=item, count=1}
-				for i=1, math.min(#positions, size) do
+			local inventory = chest.get_output_inventory()
+			local contents = inventory.get_contents()
+			local item = next(contents)
+			local size = contents[item]
+			local itemstack = {name=item, count=1}
+			if size then 
+				local toTransfer = math.min(#positions, size)
+				for i=1, toTransfer do
 					if belt.get_transport_line(laneNumber).insert_at(positions[i], itemstack) then
-						chest.get_inventory(1).remove(itemstack)
 						power.energy = power.energy - energy_per_action
 					end
 				end
-				break
+				inventory.remove({name=item, count=toTransfer})
 			end
 		end
 	end
@@ -512,15 +511,17 @@ end
 
 function sourceToTargetInventory(source, target, power)
 	if source and source.valid and power and power.valid and power.energy >= energy_per_action then
-		local _inventory = source.get_output_inventory().get_contents()
-		for item, size in pairs(_inventory) do
+		local inventory = source.get_output_inventory()
+		local contents = inventory.get_contents()
+		local item = next(contents)
+		local size = contents[item]
+		if size then 
 			local itemstack = {name=item, count=math.min(maxStackSize,size)}
 			if target and target.valid and target.can_insert(itemstack) then
 				itemstack.count = target.insert(itemstack)
-				source.get_output_inventory().remove(itemstack)
+				inventory.remove(itemstack)
 				power.energy = power.energy - energy_per_action
 			end
-			break
 		end
 	end
 end
@@ -687,7 +688,7 @@ function checkTransportEntity(entity, direction, undergroundType)
 end
 
 function isInventory (entity, onTrack)
-	if entity and entity.name ~= "interface-chest" and entity.get_output_inventory() ~= nil and (isMoveable(entity) == false or isTrain(entity, onTrack)) then
+	if entity and entity.name ~= "interface-chest" and entity.type ~= "beacon" and entity.get_output_inventory() ~= nil and (isMoveable(entity) == false or isTrain(entity, onTrack)) then
 		return entity
 	else
 		return nil
@@ -719,8 +720,16 @@ function isTransport (entity)
 	end
 end
 
+function isInterfaceChest (entity)
+	 if entity.name == "interface-chest" or entity.name == "interface-chest-trash"  then
+		return true
+	 else
+		return false
+	 end 
+end
+
 function debugPrint(thing)
-	for _, player in pairs(game.players) do	
+	for _, player in pairs(game.players) do
 		player.print(serpent.block(thing))
 	end
 end

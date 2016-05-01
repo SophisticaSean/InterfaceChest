@@ -69,7 +69,7 @@ function InterfaceChest_Create(event)
 	if entity.name == "interface-chest" or entity.name == "interface-chest-trash" then
 		local nextIndex = #global.InterfaceChest_MasterList+1
 		global.InterfaceChest_MasterList[nextIndex] = updateInterfaceChest(entity)
-		--debugPrint("Interface Belt count: " .. nextIndex)
+		--debugPrint("Interface Chest created: " .. nextIndex)
 	end
 
 	if entity.name == "interface-belt-balancer" then
@@ -141,9 +141,8 @@ function InterfaceBelt_RunStep()
 		global.InterfaceChest_DataVersion = dataVersion
 
 	else
-
+		local listChange = false
 		local masterList = global.InterfaceBelt_MasterList
-		local beltsToDelete = {}
 		for index=1, #masterList do
 			local stagger = game.tick + index
 			if 0 == (stagger % beltBalancerThrottle) then
@@ -154,14 +153,21 @@ function InterfaceBelt_RunStep()
 					balanceBelt(right, left)
 					balanceBelt(left, right)
 				else
-					beltsToDelete[#beltsToDelete+1] = index
+					listChange = true
+					masterList[index] = "remove"
 				end
 			end
 		end
-		-- Clean up Dead Belts
-		for index=1, #beltsToDelete do
-			local deleteKey = beltsToDelete[index]
-			table.remove(global.InterfaceBelt_MasterList, deleteKey)
+		if listChange then
+			local returnList = {}
+			for index=1, #masterList do
+			local belt = masterList[index]
+				if masterList[index] ~= "remove" then
+					table.insert(returnList, belt)
+				end
+			end
+			debugPrint("Return: " .. #returnList )
+			global.InterfaceBelt_MasterList = returnList
 		end
 	end
 end
@@ -207,15 +213,17 @@ function InterfaceChest_RunStep(event)
 	else
 		InterfaceBelt_RunStep()
 		local masterList = global.InterfaceChest_MasterList
-		local chestsToDelete = {}
+		local listChange = false
+		--debugPrint("Size: " .. #masterList)
 		for index=1, #masterList do
 			local interfaceChest = masterList[index]
 			local stagger = game.tick + index
 			if 0 == (stagger % chestThrottle) then
-				if interfaceChest and interfaceChest.chest and interfaceChest.chest.valid then
+				if interfaceChest.chest and interfaceChest.chest.valid then
 					if interfaceChest.power == nil or interfaceChest.power.valid == false then
 						interfaceChest = updateInterfaceChest(interfaceChest.chest)
 						global.InterfaceChest_MasterList[index] = interfaceChest
+						--debugPrint("Create missing power for: " .. index)
 					else
 						if interfaceChest.power and interfaceChest.power.valid and interfaceChest.power.energy >= (idleDraw) then
 							interfaceChest.power.energy = interfaceChest.power.energy - idleDraw
@@ -260,7 +268,6 @@ function InterfaceChest_RunStep(event)
 										local inventory = interfaceChest.inventories[i]
 										local inventoryIndex = 1
 										if inventory and inventory.valid then
-											--if inventory.type == "assembling-machine" then inventoryIndex = defines.inventory.assembling_machine_output end
 											if inventory.get_output_inventory() and inventory.get_output_inventory().is_empty() == false then
 												sourceToTargetInventory(inventory, interfaceChest.chest, interfaceChest.power)
 											end
@@ -301,16 +308,27 @@ function InterfaceChest_RunStep(event)
 					end
 				else
 					if interfaceChest.power and interfaceChest.power.valid then
-						interfaceChest.power.destroy()
+						if interfaceChest.power.destroy() then
+							--debugPrint("Power removed: " ..   index)
+							masterList[index] = "remove"
+							listChange = true
+						end
 					end
-					chestsToDelete[#chestsToDelete+1] = index
 				end
 			end
 		end
 		-- Clean up Dead Chests
-		for index=1, #chestsToDelete do
-			local deleteKey = chestsToDelete[index]
-			table.remove(global.InterfaceChest_MasterList, deleteKey)
+		if listChange then
+			local returnList = {}
+			--debugPrint("Size: " .. #masterList)
+			for index=1, #masterList do
+			local interfaceChest = masterList[index]
+				if masterList[index] ~= "remove" then
+					table.insert(returnList, interfaceChest)
+				end
+			end
+			--debugPrint("Size After: " .. #returnList)
+			global.InterfaceChest_MasterList = returnList
 		end
 	end
 end
@@ -323,15 +341,16 @@ function updateInterfaceChest(chest)
 	local gridTransport = {}
 	local gridInventory = {}
 	local isRail = false
-	local powerDraw
+	local powerSource
 	
 	for index=1, #entities do
 		local entity = entities[index]
 		if entity.type ~= "decorative" then
 			if isRail == false and entity.type == "straight-rail" then
 				isRail = true
-			elseif entity.name == "interface-chest-power" and entity.position.x >= center[1].x and entity.position.x <= center[2].x and entity.position.y >= center[1].y and entity.position.y <= center[2].y then
-				powerDraw = entity
+			elseif powerSource == nil and entity.name == "interface-chest-power" and entity.position.x > center[1].x and entity.position.x < center[2].x and entity.position.y > center[1].y and entity.position.y < center[2].y then
+				--debugPrint("Power: " .. entity.position.x .. " > " .. center[1].x .. " and " .. entity.position.x .. " < " ..  center[2].x .. " and " .. entity.position.y .. " > " ..  center[1].y .. " and " .. entity.position.y .. " < " ..  center[2].y)
+				powerSource = entity
 			end
 		end
 	end
@@ -389,11 +408,12 @@ function updateInterfaceChest(chest)
 		end
 	end
 
-	if powerDraw == nil then
-		powerDraw = chest.surface.create_entity{name="interface-chest-power", position=chest.position, force=game.players[1].force}		
+	if powerSource == nil then
+		--debugPrint("Create power: " .. serpent.block(chest.position))
+		powerSource = chest.surface.create_entity{name="interface-chest-power", position=chest.position, force=game.players[1].force}
 	end
 
-	return {chest = chest, inputBelts = getInputBelts(gridTransport), outputBelts = getOutputBelts(gridTransport), inventories = getInventories(gridInventory), onRail = isRail, dirty = false, power = powerDraw}
+	return {chest = chest, inputBelts = getInputBelts(gridTransport), outputBelts = getOutputBelts(gridTransport), inventories = getInventories(gridInventory), onRail = isRail, dirty = false, power = powerSource}
 end
 
 function voidChest(interfaceChest, stagger, index)

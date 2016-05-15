@@ -1,15 +1,20 @@
 require "defines"
 require "util"
 
--- Belts have 8 slots: yellow 36 ticks, red 18 ticks, blue 12 ticks
--- Splitters/underground 4 slots: need twice the tick rate
+-- Belts lanes have 4 slots: yellow 36 ticks, red 18 ticks, blue 12 ticks
+-- Ticks to clear a slot 9, 4.5, 3 
+-- Splitters/underground 2 slots: need twice the tick rate
+-- Red splitter/underground do some magic -- cuase technically they should have a gap
+-- Should take 9 ticks for 2 items to clear out of the way, but on splitter/underground they dissapear ahead of schedule.
+-- On red splitter/underground belt they alternate sending items on tick 0, 6, 18, 24, 30 = 9 average
+
 local chestThrottle = 6
 local railCheckThrottle = chestThrottle * 15
 local voidThrottle = chestThrottle * 20
 local energy_per_action = 8000
 local idleDraw = 500
 
-local beltBalancerThrottle = 6
+local beltBalancerThrottle = 12
 
 -- Internal Use
 local dataVersion = 8
@@ -24,6 +29,12 @@ local NORTH = defines.direction.north
 local EAST = defines.direction.east
 local SOUTH = defines.direction.south
 local WEST = defines.direction.west
+
+-- Optimal places on a belt to place item
+local beltPositions = {.159, .44, .72, 1}
+--local beltPositions = {0, .28, .56, .841}
+--local beltPositions = {.56, .841}
+local splitterPositions = {0, .28}
 
 -- Adjacent tiles
 function areaNorth(position) return {{position.x - 0.5, position.y - 1.5},{position.x + 0.5, position.y - 0.5}} end
@@ -177,8 +188,17 @@ function balanceBelt (source, target)
 	for item, size in pairs(source.get_contents()) do
 		local diff = size - target.get_item_count(item)
 		local itemstack = {name=item, count=1}
-		if diff > 1 and size > 1 then
-			if target.insert_at(0.72, itemstack) then
+		if diff > 2 and size > 2 then
+			if target.insert_at(beltPositions[1], itemstack) then
+				source.remove_item(itemstack)
+				action = true
+			end
+			if target.insert_at(beltPositions[2], itemstack) then
+				source.remove_item(itemstack)
+				action = true
+			end
+		elseif diff > 1 and size > 1 then
+			if target.insert_at(beltPositions[1], itemstack) then
 				source.remove_item(itemstack)
 				action = true
 			end
@@ -477,11 +497,6 @@ function beltToChest(belt, laneNumber, chest, power)
 	end
 end
 
-local beltPositions = {.159, .44, .72, 1}
---local beltPositions = {0, .28, .56, .841}
---local beltPositions = {.72, 1}
-local splitterPositions = {0, .28}
-
 function chestToBelt(belt, laneNumber, chest, power)
 	if chest and chest.valid and power and power.valid and power.energy >= energy_per_action then
 		local positions = {}
@@ -500,6 +515,7 @@ function chestToBelt(belt, laneNumber, chest, power)
 				local toTransfer = math.min(#positions, size)
 				for i=1, toTransfer do
 					if belt.get_transport_line(laneNumber).insert_at(positions[i], itemstack) then
+						--debugPrint("Inserted: " .. positions[i] .. " tick: " .. game.tick)
 						power.energy = power.energy - energy_per_action
 					end
 				end
@@ -750,3 +766,18 @@ script.on_event(defines.events.on_player_rotated_entity, InterfaceChest_Rotated)
 -- On remove
 script.on_event(defines.events.on_preplayer_mined_item, InterfaceChest_Mined)
 script.on_event(defines.events.on_robot_pre_mined, InterfaceChest_Mined)
+
+script.on_event(defines.events.on_entity_died, function(event)
+	local entity = event.entity
+	if entity.name == "interface-chest-power" then
+		local entities = entity.surface.find_entities(getBoundingBox(entity.position, 0))
+		for index=1, #entities do
+			if isInterfaceChest( entities[index]) then
+				local chest = entities[index]
+				if chest and chest.valid then
+					chest.destroy();
+				end
+			end
+		end
+	end
+end)

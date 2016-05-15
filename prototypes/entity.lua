@@ -85,7 +85,7 @@ data:extend(
 		icon = "__InterfaceChest__/graphics/icon/interfacechest.png",
 		flags = { "placeable-player", "placeable-enemy", "player-creation"},
 		minable = { mining_time = 2, result = "raw-wood" },
-		max_health = 1000,
+		max_health = 200,
 		corpse = "medium-remnants",
 		collision_mask = {"ghost-layer"},
 		collision_box = {{-0.25, -0.25}, {0.25, 0.25}},

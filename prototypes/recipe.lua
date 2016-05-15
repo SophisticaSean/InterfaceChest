@@ -6,7 +6,7 @@ data:extend(
 		enabled = "false",
 		ingredients =
 			{
-			  {"smart-chest", 1},
+			  {"steel-chest", 1},
 			  {"fast-inserter", 4},
 			  {"fast-transport-belt", 4},
 			  {"processing-unit", 2}

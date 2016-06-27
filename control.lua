@@ -1,4 +1,3 @@
-require "defines"
 require "util"
 
 -- Belts lanes have 4 slots: yellow 36 ticks, red 18 ticks, blue 12 ticks
@@ -17,7 +16,7 @@ local idleDraw = 500
 local beltBalancerThrottle = 12
 
 -- Internal Use
-local dataVersion = 8
+local dataVersion = 11
 
 -- How many a chest can pull from a belt lane 0-8
 local inputMultiplier = 8
@@ -148,7 +147,7 @@ function InterfaceBelt_RunStep()
 		-- Initialize
 		InterfaceChest_Initialize()
 
-		local beltBalancer = game.get_surface(1).find_entities_filtered{area={{-10000, -10000},{10000, 10000}}, name="interface-belt-balancer"}
+		local beltBalancer = game.surfaces[1].find_entities_filtered{area={{-10000, -10000},{10000, 10000}}, name="interface-belt-balancer"}
 		
 		local masterList = {}
 		for index=0, beltBalancerThrottle-1 do
@@ -215,8 +214,8 @@ function InterfaceChest_RunStep(event)
 		InterfaceChest_Initialize()
 
 		-- Find all this mod's chests and index them
-		local trashCan = game.get_surface(1).find_entities_filtered{area={{-10000, -10000},{10000, 10000}}, name="interface-chest-trash"}
-		local interfaceChests = game.get_surface(1).find_entities_filtered{area={{-10000, -10000},{10000, 10000}}, name="interface-chest"}
+		local trashCan = game.surfaces[1].find_entities_filtered{area={{-10000, -10000},{10000, 10000}}, name="interface-chest-trash"}
+		local interfaceChests = game.surfaces[1].find_entities_filtered{area={{-10000, -10000},{10000, 10000}}, name="interface-chest"}
 
 		local masterList = {}
 		for index=0, chestThrottle-1 do

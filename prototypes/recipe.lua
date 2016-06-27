@@ -21,7 +21,7 @@ data:extend(
 			{
 			  {"iron-chest", 1},
 			  {"fast-inserter", 2},
-			  {"basic-transport-belt", 2},
+			  {"transport-belt", 2},
 			  {"stone-furnace", 1}
 			},
 		result = "interface-chest-trash"

@@ -150,6 +150,7 @@ data:extend(
 			  height = 1,
 			  axially_symmetrical = false,
 			  direction_count = 1,
+			   frame_count = 1,
 			  shift = { 0.109375, 0.03125 }
 			},
 			
@@ -186,7 +187,8 @@ data:extend(
 			}
 		  },
 		  
-		}
+		},
+		call_for_help_radius = 40
 	  },
 	  {
 		type = "transport-belt",
@@ -235,7 +237,11 @@ data:extend(
 		ending_patch = ending_patch_prototype,
 		ending_patch = ending_patch_prototype,
 		fast_replaceable_group = "transport-belt",
-		speed = 0.09375
+		speed = 0.09375,
+		connector_frame_sprites = transport_belt_connector_frame_sprites,
+		circuit_connector_sprites = transport_belt_circuit_connector_sprites,
+		circuit_wire_connection_point = transport_belt_circuit_wire_connection_point,
+		circuit_wire_max_distance = transport_belt_circuit_wire_max_distance
 	  },
  
 	}

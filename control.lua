@@ -16,7 +16,7 @@ local idleDraw = 500
 local beltBalancerThrottle = 12
 
 -- Internal Use
-local dataVersion = 11
+local dataVersion = 13
 
 -- How many a chest can pull from a belt lane 0-8
 local inputMultiplier = 8
@@ -240,11 +240,11 @@ function InterfaceChest_RunStep(event)
 		InterfaceBelt_RunStep()
 		local modTick = game.tick % chestThrottle
 		local masterList = global.InterfaceChest_MasterList[modTick]
-		local listChange = false
+
 		if masterList then
 			for index, value in pairs(masterList) do
 				local interfaceChest = value
-				if interfaceChest.chest and interfaceChest.chest.valid then
+				if interfaceChest.chest and interfaceChest.chest.valid then					
 					if interfaceChest.power == nil or interfaceChest.power.valid == false then
 						interfaceChest = updateInterfaceChest(interfaceChest.chest)
 						global.InterfaceChest_MasterList[modTick][index] = interfaceChest
@@ -255,6 +255,7 @@ function InterfaceChest_RunStep(event)
 							if interfaceChest.chest.name == "interface-chest-trash" then
 								voidChest(interfaceChest, modTick, index)
 							else
+								
 								-- No good way to check for nearby train, so if on rail check for train
 								if interfaceChest.onRail and modTick == (game.tick % railCheckThrottle) then
 									interfaceChest.dirty = true
@@ -695,7 +696,7 @@ function getInventories(grid)
 end
 
 function checkTransportEntity(entity, direction, undergroundType)
-	if entity and (entity.type ~= "transport-belt-to-ground" or (entity.type == "transport-belt-to-ground" and entity.belt_to_ground_type == undergroundType)) and entity.direction == direction then
+	if entity and (entity.type ~= "underground-belt" or (entity.type == "underground-belt" and entity.belt_to_ground_type == undergroundType)) and entity.direction == direction then
 		return entity
 	else
 		return nil
@@ -728,7 +729,7 @@ function isTrain (entity, onTrack)
 end
 
 function isTransport (entity)
-	if entity and (entity.type == "transport-belt" or entity.type == "splitter" or entity.type == "transport-belt-to-ground") then
+	if entity and (entity.type == "transport-belt" or entity.type == "splitter" or entity.type == "underground-belt") then
 		return entity
 	else
 		return nil
@@ -774,7 +775,8 @@ script.on_event(defines.events.on_entity_died, function(event)
 			if isInterfaceChest( entities[index]) then
 				local chest = entities[index]
 				if chest and chest.valid then
-					chest.destroy();
+					--debugPrint("Chest Destoyed: " .. getKey(chest.location))
+					chest.destroy()
 				end
 			end
 		end

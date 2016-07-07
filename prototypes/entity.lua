@@ -4,7 +4,7 @@ data:extend(
 	{
 		{
 		-- Interface Chest
-		type = "smart-container",
+		type = "container",
 		name = "interface-chest",
 		icon = "__InterfaceChest__/graphics/icon/interfacechest.png",
 		flags = {"placeable-neutral", "player-creation"},

@@ -30,9 +30,7 @@ local SOUTH = defines.direction.south
 local WEST = defines.direction.west
 
 -- Optimal places on a belt to place item
-local beltPositions = {.159, .44, .72, 1}
---local beltPositions = {0, .28, .56, .841}
---local beltPositions = {.56, .841}
+local beltPositions = {0, .182, .463, .744}
 local splitterPositions = {0, .28}
 
 -- Adjacent tiles
@@ -506,20 +504,49 @@ function chestToBelt(belt, laneNumber, chest, power)
 			positions = splitterPositions
 		end
 		if belt.get_transport_line(laneNumber).can_insert_at(positions[1]) then
+		
+
+			
+		
 			local inventory = chest.get_output_inventory()
 			local contents = inventory.get_contents()
 			local item = next(contents)
 			local size = contents[item]
 			local itemstack = {name=item, count=1}
+			
+
+			
 			if size then 
+			
+			--[[
+			--Find Positions 0 to 1
+			for i=0, 1000 do
+			if belt.get_transport_line(laneNumber).insert_at(i/1000, itemstack) then
+					debugPrint("Inserted: " .. i/1000 .. " tick: " .. game.tick)
+					power.energy = power.energy - energy_per_action
+					inventory.remove({name=item, count=1})
+				end
+			end
+			
+			--Find Positions 1 to 0
+			for i=1, 1000 do
+			if belt.get_transport_line(laneNumber).insert_at((1001-i)/1000, itemstack) then
+					debugPrint("Inserted: " .. (1001-i)/1000 .. " tick: " .. game.tick)
+					power.energy = power.energy - energy_per_action
+					inventory.remove({name=item, count=1})
+				end
+			end
+			]]--
+			
 				local toTransfer = math.min(#positions, size)
 				for i=1, toTransfer do
 					if belt.get_transport_line(laneNumber).insert_at(positions[i], itemstack) then
 						--debugPrint("Inserted: " .. positions[i] .. " tick: " .. game.tick)
 						power.energy = power.energy - energy_per_action
+						inventory.remove({name=item, count=1})
 					end
 				end
-				inventory.remove({name=item, count=toTransfer})
+				
 			end
 		end
 	end

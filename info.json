@@ -1,6 +1,6 @@
 {
   "name": "InterfaceChest",
-  "version": "1.13.1",
+  "version": "1.13.2",
   "factorio_version": "0.13",
   "dependencies": ["base >= 0.13"],
   "title": "Interface Chest",
